@@ -217,7 +217,9 @@ User Message → AI Chat Service → Parsed Transaction → Preview → Confirm 
   "Expiration": "Short-lived tokens",
   "Secret": "Strong secret key (256-bit minimum)"
 }
-Security Rules
+
+
+### Security Rules
 ✅ No sensitive data stored in JWT tokens
 ✅ All endpoints require authentication (except auth routes)
 ✅ Role-based authorization
@@ -225,3 +227,25 @@ Security Rules
 ✅ AI outputs always require user confirmation
 ✅ Input validation on all endpoints
 ✅ HTTPS enforced
+
+
+🧠 Key Design Decisions
+1. Single Source of Truth
+Transactions are the single source of truth.
+Balance is just a cached calculation that can be rebuilt at any time.
+
+2. Single Save Logic
+All transaction creation flows through TransactionService —
+whether the input comes from manual entry, speech, OCR, or chat.
+
+3. AI Safety
+AI never writes to the database directly.
+Every AI suggestion goes through: Preview → User Confirmation → Backend Validation → Save
+
+4. Clean Architecture
+Strict dependency rules: outer layers depend on inner layers, never the reverse.
+Domain has zero external dependencies.
+
+
+📄 License
+This project is part of the graduation requirements at Helwan University, Faculty of Computers and Artificial Intelligence — Class of 2026.
