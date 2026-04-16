@@ -222,29 +222,48 @@ User Message → AI Chat Service → Parsed Transaction → Preview → Confirm 
 - ✅ HTTPS enforced
 
 ### JWT Configuration
-```json
-{
-  "Claims": ["sub (UserId)", "email", "username", "role", "jti", "iat"],
-  "Expiration": "Short-lived tokens",
-  "Secret": "Strong secret key (256-bit minimum)"
-}
-🧠 Key Design Decisions
-1. Single Source of Truth
-Transactions are the single source of truth.
-Balance is just a cached calculation that can be rebuilt at any time.
 
-2. Single Save Logic
-All transaction creation flows through TransactionService —
-whether the input comes from manual entry, speech, OCR, or chat.
+| Claim | Description |
+|-------|-------------|
+| sub | UserId |
+| email | User email |
+| username | User name |
+| role | User role |
+| jti | Token ID |
+| iat | Issued at |
 
-3. AI Safety
-AI never writes to the database directly.
-Every AI suggestion goes through:
-Preview → User Confirmation → Backend Validation → Save
+> **Expiration:** Short-lived tokens
+> **Secret:** Strong secret key (256-bit minimum)
 
-4. Clean Architecture
-Strict dependency rules: outer layers depend on inner layers, never the reverse.
-Domain has zero external dependencies.
+---
 
-📄 License
-This project is part of the graduation requirements at Helwan University, Faculty of Computers and Artificial Intelligence — Class of 2026.
+## 🧠 Key Design Decisions
+
+### 1. Single Source of Truth
+> **Transactions** are the single source of truth.
+> Balance is just a **cached calculation** that can be rebuilt at any time.
+
+### 2. Single Save Logic
+> All transaction creation flows through **TransactionService** —
+> whether the input comes from manual entry, speech, OCR, or chat.
+
+### 3. AI Safety
+> AI never writes to the database directly.
+> Every AI suggestion goes through:
+
+| Step | Action |
+|------|--------|
+| 1 | AI generates preview |
+| 2 | User confirms |
+| 3 | Backend validates |
+| 4 | TransactionService saves |
+
+### 4. Clean Architecture
+> Strict dependency rules: outer layers depend on inner layers, never the reverse.
+> **Domain has zero external dependencies.**
+
+---
+
+## 📄 License
+
+This project is part of the graduation requirements at **Helwan University, Faculty of Computers and Artificial Intelligence** — Class of 2026.
