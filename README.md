@@ -4,7 +4,6 @@
 
 ![ASP.NET Core](https://img.shields.io/badge/ASP.NET%20Core-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
 ![SQL Server](https://img.shields.io/badge/SQL%20Server-CC2927?style=for-the-badge&logo=microsoft-sql-server&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)
 ![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=JSON%20web%20tokens&logoColor=white)
 ![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
@@ -21,12 +20,6 @@
 - [Database Schema](#database-schema)
 - [API Endpoints](#api-endpoints)
 - [Security](#security)
-- [Getting Started](#getting-started)
-- [Project Structure](#project-structure)
-- [Screenshots](#screenshots)
-- [Team](#team)
-- [License](#license)
-
 ---
 
 ## 🎯 About The Project
@@ -35,37 +28,13 @@ Finexa is a **Personal Finance Management System** that helps users track their 
 
 - 🎤 **Speech-to-Text** transaction input
 - 🧾 **OCR** receipt scanning
-- 💬 **Natural Language** transaction parsing via chat
+- 💬 **Natural Language** transaction parsing via chat agent
 - 📊 **Smart Dashboard** with financial analytics
 
 ### 🧠 Core Design Philosophy
 AI assists, never decides.
 Backend validates everything.
 User always confirms before saving.
-
-text
-
----
-
-## 🏗️ System Architecture
-
-The project follows **Clean Architecture** principles with clear separation of concerns:
-┌─────────────────────────────────────────┐
-│ API Layer │
-│ (Controllers & Endpoints) │
-├─────────────────────────────────────────┤
-│ Application Layer │
-│ (Services & Business Logic) │
-├──────────────────┬──────────────────────┤
-│ Infrastructure │ AI Integration │
-│ (DB, Identity, │ (Speech, OCR, │
-│ Repos, JWT) │ Chat, Parse) │
-├──────────────────┴──────────────────────┤
-│ Domain Layer │
-│ (Entities, Enums, Rules) │
-└─────────────────────────────────────────┘
-
-text
 
 ---
 
@@ -106,7 +75,6 @@ text
 ### Design Principle
 AI → Preview → User Confirms → Backend Validates → Save
 
-text
 
 > **AI never saves data directly.** All AI outputs go through a preview step
 > where the user must confirm before any data is persisted.
@@ -116,7 +84,6 @@ text
 ### 🎤 Speech-to-Text Flow
 Audio File → AI Speech Service → Text → Parse → Preview → Confirm → Save
 
-text
 
 | Step | Handler |
 |------|---------|
@@ -130,7 +97,7 @@ text
 ### 🧾 OCR Flow
 Receipt Image → AI OCR Service → Extracted Data → Preview → Confirm → Save
 
-text
+
 
 | Step | Handler |
 |------|---------|
@@ -144,7 +111,6 @@ text
 ### 💬 Chat Flow
 User Message → AI Chat Service → Parsed Transaction → Preview → Confirm → Save
 
-text
 
 | Step | Handler |
 |------|---------|
@@ -172,60 +138,11 @@ text
 | **Language** | C# |
 | **Database** | SQL Server |
 | **ORM** | Entity Framework Core (Code-First) |
-| **Caching** | Redis |
 | **Authentication** | ASP.NET Identity + JWT |
 | **Architecture** | Clean Architecture |
 | **API Documentation** | Swagger / Swashbuckle |
 | **Deployment** | MonsterASP (HTTPS) |
 | **Version Control** | Git & GitHub |
-
----
-
-## 🗄️ Database Schema
-
-### Core Entities
-┌──────────────┐ ┌──────────────┐
-│ AppUser │────<│ Transaction │
-│ │ │ │
-│ Id │ │ Id │
-│ Email │ │ Amount │
-│ UserName │ │ Type │
-│ FirstName │ │ CategoryId │
-│ LastName │ │ Notes │
-└──────┬───────┘ │ OccurredAt │
-│ │ Source │
-│ │ GoalId? │
-│ └──────────────┘
-│
-├────────<┌──────────────┐
-│ │ Goal │
-│ │ │
-│ │ Id │
-│ │ Title │
-│ │ TargetAmount │
-│ │ CurrentAmount│
-│ │ Status │
-│ └──────────────┘
-│
-├────────<┌──────────────┐
-│ │ UserBalance │
-│ │ │
-│ │ TotalIncome │
-│ │ TotalExpense │
-│ │ TotalBalance │
-│ └──────────────┘
-│
-└────────<┌──────────────┐
-│ Category │
-│ │
-│ Id │
-│ Name │
-│ Type │
-│ IsDefault │
-└──────────────┘
-
-text
-
 ---
 
 ## 🔌 API Endpoints
@@ -308,89 +225,3 @@ Security Rules
 ✅ AI outputs always require user confirmation
 ✅ Input validation on all endpoints
 ✅ HTTPS enforced
-🚀 Getting Started
-Prerequisites
-.NET 6+ SDK
-SQL Server
-Redis Server
-Git
-Installation
-Clone the repository
-bash
-git clone https://github.com/YOUR_USERNAME/finexa.git
-cd finexa
-Update connection strings in appsettings.json
-json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Your SQL Server connection string",
-    "Redis": "Your Redis connection string"
-  },
-  "JWT": {
-    "SecretKey": "Your secret key",
-    "Issuer": "Finexa",
-    "Audience": "FinexaUsers",
-    "ExpirationInMinutes": 60
-  }
-}
-Apply database migrations
-bash
-dotnet ef database update
-Run the application
-bash
-dotnet run
-Open Swagger
-text
-https://localhost:xxxx/swagger
-📁 Project Structure
-text
-Finexa/
-├── src/
-│   ├── Finexa.Domain/              # Entities, Enums, Core Rules
-│   │   ├── Entities/
-│   │   │   ├── AppUser.cs
-│   │   │   ├── Transaction.cs
-│   │   │   ├── Goal.cs
-│   │   │   ├── UserBalance.cs
-│   │   │   └── Category.cs
-│   │   └── Enums/
-│   │       ├── TransactionType.cs
-│   │       ├── TransactionSource.cs
-│   │       └── GoalStatus.cs
-│   │
-│   ├── Finexa.Application/         # Business Logic & DTOs
-│   │   ├── Services/
-│   │   │   ├── AuthService.cs
-│   │   │   ├── TransactionService.cs
-│   │   │   ├── GoalService.cs
-│   │   │   ├── DashboardService.cs
-│   │   │   ├── CategoryService.cs
-│   │   │   └── UserService.cs
-│   │   ├── AI/
-│   │   │   ├── SpeechAppService.cs
-│   │   │   ├── OcrAppService.cs
-│   │   │   ├── ParseTransactionAppService.cs
-│   │   │   └── ConfirmTransactionService.cs
-│   │   └── DTOs/
-│   │
-│   ├── Finexa.Infrastructure/      # DB, Identity, Repos
-│   │   ├── Data/
-│   │   │   └── FinexaDbContext.cs
-│   │   ├── Repositories/
-│   │   │   ├── GenericRepository.cs
-│   │   │   └── UnitOfWork.cs
-│   │   ├── Identity/
-│   │   │   └── JwtTokenGenerator.cs
-│   │   └── Seeders/
-│   │
-│   └── Finexa.API/                 # Controllers & Configuration
-│       ├── Controllers/
-│       │   ├── AuthController.cs
-│       │   ├── TransactionController.cs
-│       │   ├── GoalController.cs
-│       │   ├── DashboardController.cs
-│       │   ├── CategoryController.cs
-│       │   ├── AIController.cs
-│       │   └── ChatController.cs
-│       ├── Program.cs
-│       └── appsettings.json
