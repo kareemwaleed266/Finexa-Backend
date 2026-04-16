@@ -218,7 +218,8 @@ User Message → AI Chat Service → Parsed Transaction → Preview → Confirm 
   "Secret": "Strong secret key (256-bit minimum)"
 }
 
-
+---
+##
 ### Security Rules
 ✅ No sensitive data stored in JWT tokens
 ✅ All endpoints require authentication (except auth routes)
@@ -227,6 +228,7 @@ User Message → AI Chat Service → Parsed Transaction → Preview → Confirm 
 ✅ AI outputs always require user confirmation
 ✅ Input validation on all endpoints
 ✅ HTTPS enforced
+---
 
 
 🧠 Key Design Decisions
