@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http.Json;
-using System.Text;
+﻿using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Threading.Tasks;
+using Finexa.Application.Common.Helpers;
 using Finexa.Application.Modules.AI.OCR.DTOs;
 using Finexa.Application.Modules.AI.OCR.Interfaces;
+using Finexa.Integration.AI.OCR.Models;
 using Microsoft.AspNetCore.Http;
 
 namespace Finexa.Integration.AI.OCR
@@ -20,41 +17,45 @@ namespace Finexa.Integration.AI.OCR
             _httpClient = httpClient;
         }
 
-        public async Task<ReceiptOcrResponseDto> ProcessAsync(
-            IFormFile file,
-            List<string> availableCategories)
+        public async Task<ReceiptOcrResponseDto> ProcessAsync(IFormFile file)
         {
             var content = new MultipartFormDataContent();
 
-            // 📸 file
-            content.Add(
-                new StreamContent(file.OpenReadStream()),
-                "file",
-                file.FileName);
+            var fileContent = new StreamContent(file.OpenReadStream());
 
-            // 🧠 categories
-            content.Add(
-                new StringContent(
-                    JsonSerializer.Serialize(availableCategories),
-                    Encoding.UTF8,
-                    "application/json"),
-                "available_categories");
+            if (!string.IsNullOrWhiteSpace(file.ContentType))
+            {
+                fileContent.Headers.ContentType =
+                    MediaTypeHeaderValue.Parse(file.ContentType);
+            }
+
+            content.Add(fileContent, "file", file.FileName);
 
             var response = await _httpClient.PostAsync("/api/receipt-ocr", content);
 
+            var raw = await response.Content.ReadAsStringAsync();
+
             if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                throw new Exception($"OCR AI Error: {error}");
-            }
+                throw new Exception($"OCR AI Error: {response.StatusCode} - {raw}");
 
-            var result = await response.Content
-                .ReadFromJsonAsync<ReceiptOcrResponseDto>();
+            var apiResponse = JsonSerializer.Deserialize<ReceiptOcrApiResponse>(
+                raw,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
 
-            if (result == null)
+            if (apiResponse == null)
                 throw new Exception("OCR AI returned empty response");
 
-            return result;
+            return new ReceiptOcrResponseDto
+            {
+                Amount = apiResponse.Amount,
+                CategoryName = apiResponse.CategoryName,
+                OccurredAt = DateTimeHelper.ParseClientLocalDateTime(apiResponse.OccurredAt),
+                Merchant = apiResponse.Merchant,
+                Item = apiResponse.Item
+            };
         }
     }
 }

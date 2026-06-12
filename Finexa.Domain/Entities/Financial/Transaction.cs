@@ -1,7 +1,10 @@
-﻿public class Transaction : BaseAuditableEntity<Guid>
+﻿using Finexa.Domain.Entities.Financial;
+
+public class Transaction : BaseAuditableEntity<Guid>
 {
     public decimal Amount { get; set; }
-
+    public string? Merchant { get; set; }
+    public string? Item { get; set; }
     public TransactionType Type { get; set; } // Income / Expense
 
     public string? Notes { get; set; }
@@ -18,4 +21,7 @@
 
     public Guid? GoalId { get; set; }
     public virtual Goal? Goal { get; set; }
+
+
+    public ICollection<TransactionAttachment> Attachments { get; set; } = new List<TransactionAttachment>();
 }

@@ -21,6 +21,7 @@ namespace Finexa.Application.Modules.AI.ParseTransaction.Services
 
         public async Task<ParseTransactionResponseDto> ParseAsync(string text)
         {
+
             if (string.IsNullOrWhiteSpace(text))
                 throw new Exception("Text is required");
 

@@ -1,4 +1,6 @@
-﻿namespace Finexa.Application.Modules.Goals.DTOs
+﻿using Finexa.Domain.Enums;
+
+namespace Finexa.Application.Modules.Goals.DTOs
 {
     public class GoalDto
     {
@@ -19,5 +21,6 @@
         public decimal MonthlyAmount { get; set; }
 
         public DateTime TargetDate { get; set; }
+        public GoalStatus Status { get; set; }
     }
 }

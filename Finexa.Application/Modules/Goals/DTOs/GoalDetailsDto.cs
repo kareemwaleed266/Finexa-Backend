@@ -1,4 +1,6 @@
-﻿namespace Finexa.Application.Modules.Goals.DTOs
+﻿using Finexa.Domain.Enums;
+
+namespace Finexa.Application.Modules.Goals.DTOs
 {
     public class GoalDetailsDto
     {
@@ -17,9 +19,9 @@
         public double ProgressPercentage { get; set; }
 
         public decimal MonthlyAmount { get; set; }
-
+        public GoalStatus Status { get; set; }
         public DateTime TargetDate { get; set; }
 
-        public List<GoalHistoryDto> History { get; set; } = new();
+        //public List<GoalHistoryDto> History { get; set; } = new();
     }
 }

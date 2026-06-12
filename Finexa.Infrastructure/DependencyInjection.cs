@@ -24,6 +24,16 @@ using Finexa.Application.Modules.AI.ParseTransaction.Interfaces;
 using Finexa.Application.Modules.AI.ParseTransaction.Services;
 using Finexa.Application.Modules.AI.OCR.Interfaces;
 using Finexa.Application.Modules.AI.OCR.Services;
+using Finexa.Application.Modules.Email.Interfaces;
+using Finexa.Application.Modules.Email;
+using Finexa.Application.Settings;
+using Finexa.Application.Common.Settings;
+using Finexa.Application.Modules.Bills.Interfaces;
+using Finexa.Application.Modules.Bills.Services;
+using Finexa.Application.Modules.Admin.Interfaces;
+using Finexa.Application.Modules.Admin.Services;
+using Finexa.Application.Modules.SavingPlans.Interfaces;
+using Finexa.Application.Modules.SavingPlans.Services;
 
 namespace Finexa.Infrastructure
 {
@@ -78,6 +88,10 @@ namespace Finexa.Infrastructure
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 
+            services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+            services.AddScoped<IEmailService, EmailService>();
+
+            services.Configure<FrontendSettings>(configuration.GetSection("FrontendSettings"));
 
             // 🔹 Other services can be registered here...
             services.AddScoped<IDashboardService, DashboardService>();
@@ -93,6 +107,25 @@ namespace Finexa.Infrastructure
             services.AddScoped<IParseTransactionAppService, ParseTransactionAppService>();
             services.AddScoped<IAiTransactionMapperService, AiTransactionMapperService>();
             services.AddScoped<IOcrAppService, OcrAppService>();
+
+
+            // Bills services
+            services.AddScoped<IBillService, BillService>();
+
+            // Admin services
+            services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
+            services.AddScoped<IAdminJobLogService, AdminJobLogService>();
+            services.AddScoped<IAdminUserService, AdminUserService>();
+            services.AddScoped<IAdminCategoryService, AdminCategoryService>();
+            services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+            services.AddScoped<IAdminBillsMonitoringService, AdminBillsMonitoringService>();
+            services.AddScoped<IAdminAiMonitoringService, AdminAiMonitoringService>();
+            services.AddScoped<IAdminSystemHealthService, AdminSystemHealthService>();
+            services.Configure<AdminSeedSettings>(configuration.GetSection("AdminSeed"));
+
+            // saving plan services
+            services.AddScoped<ISavingPlanService, SavingPlanService>();
+
             return services;
         }
     }

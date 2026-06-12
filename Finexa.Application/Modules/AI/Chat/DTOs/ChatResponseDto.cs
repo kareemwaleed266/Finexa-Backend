@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Finexa.Application.Modules.AI.ParseTransaction.DTOs;
 
 namespace Finexa.Application.Modules.AI.Chat.DTOs
 {
@@ -13,6 +14,7 @@ namespace Finexa.Application.Modules.AI.Chat.DTOs
         public string? Summary { get; set; }
 
         public bool SummaryUpdated { get; set; }
+        public List<ParsedTransactionItemDto> Transactions { get; set; } = new();
 
         public string? Intent { get; set; }
 

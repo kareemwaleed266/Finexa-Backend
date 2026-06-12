@@ -3,5 +3,6 @@
     Manual = 1,
     Chat = 2,
     Speech = 3,
-    OCR = 4
+    OCR = 4,
+    Bill = 5
 }

@@ -64,8 +64,10 @@ namespace Finexa.Application.Modules.AI.ParseTransaction.Services
                 Type = type,
                 CategoryId = category.Id,
                 Notes = parsed.CategoryName ?? "AI Transaction",
-                OccurredAt = parsed.OccurredAt ?? DateTime.UtcNow
-                
+                OccurredAt = parsed.OccurredAt ?? DateTime.UtcNow,
+                Merchant = parsed.Merchant,
+                Item = parsed.Item
+
             };
         }
     }

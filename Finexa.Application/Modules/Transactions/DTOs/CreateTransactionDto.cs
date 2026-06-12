@@ -8,10 +8,13 @@ namespace Finexa.Application.Modules.Transactions.DTOs
 
         public TransactionType Type { get; set; }
         public Guid CategoryId { get; set; }
-
+        public string? Merchant { get; set; }
+        public string? Item { get; set; }
         public string? Notes { get; set; } = string.Empty;
 
         public DateTime? OccurredAt { get; set; }
-        public Guid? GoalId { get; set; }
+        //public Guid? GoalId { get; set; }
     }
 }
+
+/// product

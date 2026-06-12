@@ -19,8 +19,4 @@
     <ProjectReference Include="..\Finexa.Domain\Finexa.Domain.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Modules\SavingPlans\" />
-  </ItemGroup>
-
 </Project>

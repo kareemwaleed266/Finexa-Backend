@@ -1,4 +1,6 @@
-﻿using Finexa.Application.Modules.Goals.DTOs;
+﻿using Finexa.Application.Common.DTOs;
+using Finexa.Application.Common.Models;
+using Finexa.Application.Modules.Goals.DTOs;
 using Finexa.Application.Modules.Goals.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,10 +28,9 @@ namespace Finexa.Api.Controllers
         }
 
         [HttpGet("get-goals")]
-        public async Task<IActionResult> GetGoals()
+        public async Task<ActionResult<PagedResult<GoalDto>>> GetGoals([FromQuery] GoalFilterDto filter)
         {
-            var result = await _goalService.GetGoalsAsync();
-
+            var result = await _goalService.GetGoalsAsync(filter);
             return Ok(result);
         }
 
@@ -42,10 +43,9 @@ namespace Finexa.Api.Controllers
         }
 
         [HttpGet("{id}/history")]
-        public async Task<IActionResult> GetGoalHistory(Guid id)
+        public async Task<ActionResult<PagedResult<GoalHistoryDto>>> GetGoalHistory(Guid id, [FromQuery] BaseFilterDto filter)
         {
-            var result = await _goalService.GetGoalHistoryAsync(id);
-
+            var result = await _goalService.GetGoalHistoryAsync(id, filter);
             return Ok(result);
         }
 

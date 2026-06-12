@@ -17,6 +17,9 @@ namespace Finexa.Integration.AI.ParseTransaction.Models
 
         [JsonPropertyName("merchant")]
         public string? Merchant { get; set; }
+        
+        [JsonPropertyName("item")]
+        public string? Item { get; set; }
 
         [JsonPropertyName("category")]
         public string? Category { get; set; }
@@ -28,6 +31,6 @@ namespace Finexa.Integration.AI.ParseTransaction.Models
         //public string? Notes { get; set; }
 
         [JsonPropertyName("date")]
-        public DateTime? OccurredAt { get; set; }
+        public string? OccurredAt { get; set; }
     }
 }

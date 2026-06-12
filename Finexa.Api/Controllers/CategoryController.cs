@@ -25,6 +25,14 @@ namespace Finexa.Api.Controllers
             return Ok(result);
         }
 
+        [HttpGet("bill-categories")]
+        public async Task<IActionResult> GetBillCategories()
+        {
+            var result = await _categoryService.GetBillCategoriesAsync();
+
+            return Ok(result);
+        }
+
         [HttpPost("create-category")]
         public async Task<IActionResult> CreateCategory(CreateCategoryDto dto)
         {

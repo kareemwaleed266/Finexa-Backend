@@ -13,8 +13,17 @@ namespace Finexa.Infrastructure.Persistence.Data.Configurations.CategoryConfig
                 .IsRequired()
                 .HasMaxLength(100);
 
+            builder.Property(c => c.IsBillCategory)
+                .IsRequired()
+                .HasDefaultValue(false);
+
+            builder.HasIndex(c => c.IsBillCategory);
+
             builder.Property(c => c.Type)
                 .HasConversion<int>();
+
+            builder.Property(x => x.IsActive)
+                .HasDefaultValue(true);
 
             builder.Property(c => c.IsDefault)
                 .IsRequired();
@@ -32,6 +41,7 @@ namespace Finexa.Infrastructure.Persistence.Data.Configurations.CategoryConfig
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasIndex(c => c.AppUserId);
+            builder.HasIndex(x => x.IsActive);
         }
     }
 }

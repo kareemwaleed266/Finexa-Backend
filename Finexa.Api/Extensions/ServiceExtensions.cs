@@ -6,11 +6,17 @@
         {
             services.AddCors(options =>
             {
-                options.AddPolicy("AllowAll", policy =>
+                options.AddPolicy("Frontend", policy =>
                 {
-                    policy.AllowAnyOrigin()
+                    policy.WithOrigins(
+                                    "https://sass-pearl.vercel.app",
+                                    "http://localhost:5173",
+                                    "http://localhost:8081",
+                                    "https://finexa-admin-six.vercel.app"
+                                      )
                           .AllowAnyMethod()
-                          .AllowAnyHeader();
+                          .AllowAnyHeader()
+                          .AllowCredentials(); 
                 });
             });
             return services;

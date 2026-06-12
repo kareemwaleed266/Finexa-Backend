@@ -11,7 +11,8 @@ namespace Finexa.Application.Modules.Transactions.DTOs
         public Guid CategoryId { get; set; }
 
         public string? Notes { get; set; }
-
+        public string? Merchant { get; set; }
+        public string? Item { get; set; }
         public DateTime? OccurredAt { get; set; }
         //public TransactionSource Source { get; set; } = TransactionSource.Manual;
 

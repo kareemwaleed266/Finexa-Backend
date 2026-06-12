@@ -1,7 +1,12 @@
-﻿using Finexa.Application.Interfaces.Persistence;
+﻿using Finexa.Application.Common.Helpers;
+using Finexa.Application.Interfaces.Persistence;
 using Finexa.Application.Modules.AI.Chat.DTOs;
 using Finexa.Application.Modules.AI.Chat.Interfaces;
+using Finexa.Application.Modules.AI.ParseTransaction.DTOs;
+using Finexa.Application.Modules.Transactions.DTOs;
+using Finexa.Application.Modules.Transactions.Interfaces;
 using Finexa.Domain.Entities.Ai.Chat;
+using Finexa.Domain.Enums;
 using Finexa.Domain.Enums.Ai;
 
 namespace Finexa.Application.Modules.AI.Chat.Services
@@ -16,15 +21,19 @@ namespace Finexa.Application.Modules.AI.Chat.Services
         private readonly IUnitOfWork _unitOfWork;
         private readonly ICurrentUserService _currentUser;
         private readonly IChatService _chatService;
+        private readonly ITransactionService _transactionService;
 
         public ChatAppService(
             IUnitOfWork unitOfWork,
             ICurrentUserService currentUser,
-            IChatService chatService)
+            IChatService chatService,
+            ITransactionService transactionService
+            )
         {
             _unitOfWork = unitOfWork;
             _currentUser = currentUser;
             _chatService = chatService;
+            _transactionService = transactionService;
         }
 
         public async Task<ChatSessionDto> CreateSessionAsync(string? title = null)
@@ -49,7 +58,7 @@ namespace Finexa.Application.Modules.AI.Chat.Services
                 SessionId = session.Id,
                 Title = session.Title,
                 LastMessage = null,
-                LastActivityAt = session.LastActivityAt
+                LastActivityAt = DateTimeHelper.EnsureUtcKind(session.LastActivityAt)
             };
         }
 
@@ -74,7 +83,7 @@ namespace Finexa.Application.Modules.AI.Chat.Services
                         SessionId = s.Id,
                         Title = s.Title,
                         LastMessage = lastMessage?.Content,
-                        LastActivityAt = s.LastActivityAt
+                        LastActivityAt = DateTimeHelper.EnsureUtcKind(s.LastActivityAt)
                     };
                 })
                 .ToList();
@@ -82,36 +91,36 @@ namespace Finexa.Application.Modules.AI.Chat.Services
             return result;
         }
 
-        public async Task<ChatDetailsDto> GetSessionDetailsAsync(Guid sessionId)
-        {
-            var userId = GetCurrentUserId();
+        //public async Task<ChatDetailsDto> GetSessionDetailsAsync(Guid sessionId)
+        //{
+        //    var userId = GetCurrentUserId();
 
-            ValidateSessionId(sessionId);
+        //    ValidateSessionId(sessionId);
 
-            var session = await GetOwnedSessionAsync(userId, sessionId);
+        //    var session = await GetOwnedSessionAsync(userId, sessionId);
 
-            var messageRepo = _unitOfWork.Repository<ChatMessage, Guid>();
+        //    var messageRepo = _unitOfWork.Repository<ChatMessage, Guid>();
 
-            var messages = await messageRepo.WhereAsync(x => x.SessionId == sessionId);
+        //    var messages = await messageRepo.WhereAsync(x => x.SessionId == sessionId);
 
-            var orderedMessages = messages
-                .OrderBy(x => x.CreatedAt)
-                .TakeLast(20)
-                .Select(m => new ChatMessageDto
-                {
-                    Role = MapRole(m.Role),
-                    Content = m.Content,
-                    CreatedAt = m.CreatedAt
-                })
-                .ToList();
+        //    var orderedMessages = messages
+        //        .OrderBy(x => x.CreatedAt)
+        //        .TakeLast(20)
+        //        .Select(m => new ChatMessageDto
+        //        {
+        //            Role = MapRole(m.Role),
+        //            Content = m.Content,
+        //            CreatedAt = m.CreatedAt
+        //        })
+        //        .ToList();
 
-            return new ChatDetailsDto
-            {
-                SessionId = session.Id,
-                Title = session.Title,
-                Messages = orderedMessages
-            };
-        }
+        //    return new ChatDetailsDto
+        //    {
+        //        SessionId = session.Id,
+        //        Title = session.Title,
+        //        Messages = orderedMessages
+        //    };
+        //}
 
         public async Task<SendMessageResponseDto> SendMessageAsync(SendMessageDto dto)
         {
@@ -119,7 +128,14 @@ namespace Finexa.Application.Modules.AI.Chat.Services
 
             ValidateSendMessage(dto);
 
-            var session = await GetOwnedSessionAsync(userId, dto.SessionId);
+            var chatRepo = _unitOfWork.Repository<ChatSession, Guid>();
+
+            var session = (await chatRepo
+                .WhereAsync(x => x.AppUserId == userId))
+                .FirstOrDefault();
+
+            if (session == null)
+                throw new Exception("Chat session not found");
 
             var messageRepo = _unitOfWork.Repository<ChatMessage, Guid>();
 
@@ -136,7 +152,7 @@ namespace Finexa.Application.Modules.AI.Chat.Services
                 {
                     Role = MapRole(m.Role),
                     Content = m.Content,
-                    CreatedAt = m.CreatedAt
+                    CreatedAt = DateTimeHelper.EnsureUtcKind(m.CreatedAt)
                 })
                 .ToList();
 
@@ -159,7 +175,7 @@ namespace Finexa.Application.Modules.AI.Chat.Services
 
             await messageRepo.AddAsync(userMessage);
 
-            session.LastActivityAt = DateTime.UtcNow;
+            session.LastActivityAt = DateTimeHelper.EnsureUtcKind(DateTime.UtcNow);
 
             await _unitOfWork.SaveChangesAsync();
 
@@ -167,6 +183,15 @@ namespace Finexa.Application.Modules.AI.Chat.Services
 
             if (string.IsNullOrWhiteSpace(aiResponse.Reply))
                 throw new Exception("AI returned empty response");
+
+            var createdTransactionsCount = 0;
+
+            if (aiResponse.Transactions != null && aiResponse.Transactions.Any())
+            {
+                createdTransactionsCount = await _transactionService.AddParsedTransactionsAsync(
+                    aiResponse.Transactions,
+                    TransactionSource.Chat);
+            }
 
             var assistantMessage = new ChatMessage
             {
@@ -195,17 +220,19 @@ namespace Finexa.Application.Modules.AI.Chat.Services
                 }
             }
 
-            session.LastActivityAt = DateTime.UtcNow;
+            session.LastActivityAt = DateTimeHelper.EnsureUtcKind(DateTime.UtcNow);
 
             await _unitOfWork.SaveChangesAsync();
+
+            var normalizedTransactions = NormalizeParsedTransactionsForResponse(aiResponse.Transactions);
 
             return new SendMessageResponseDto
             {
                 SessionId = session.Id,
-                Reply = aiResponse.Reply
+                Reply = aiResponse.Reply,
+                Transactions = normalizedTransactions,
             };
         }
-
 
         private Guid GetCurrentUserId()
         {
@@ -228,8 +255,8 @@ namespace Finexa.Application.Modules.AI.Chat.Services
             if (dto == null)
                 throw new Exception("Request is null");
 
-            if (dto.SessionId == Guid.Empty)
-                throw new Exception("Invalid session");
+            //if (dto.SessionId == Guid.Empty)
+            //    throw new Exception("Invalid session");
 
             if (string.IsNullOrWhiteSpace(dto.Message))
                 throw new Exception("Message is required");
@@ -259,6 +286,61 @@ namespace Finexa.Application.Modules.AI.Chat.Services
                 ChatRole.Assistant => "assistant",
                 ChatRole.System => "system",
                 _ => "user"
+            };
+        }
+
+        private static List<ParsedTransactionItemDto> NormalizeParsedTransactionsForResponse(List<ParsedTransactionItemDto>? transactions)
+        {
+            if (transactions == null || !transactions.Any())
+                return new List<ParsedTransactionItemDto>();
+
+            return transactions
+                .Select(t => new ParsedTransactionItemDto
+                {
+                    Amount = t.Amount,
+                    CategoryName = t.CategoryName,
+                    Type = t.Type,
+                    Notes = t.Notes,
+                    OccurredAt = t.OccurredAt.HasValue
+                        ? DateTimeHelper.EnsureUtcKind(
+                            DateTimeHelper.ConvertClientLocalToUtc(t.OccurredAt.Value)
+                        )
+                        : null,
+                    Merchant = t.Merchant,
+                    Item = t.Item
+                })
+                .ToList();
+        }
+        public async Task<ChatDetailsDto> GetSessionDetailsAsync()
+        {
+            var userId = GetCurrentUserId();
+
+            var chatRepo = _unitOfWork.Repository<ChatSession, Guid>();
+
+            var session = (await chatRepo.WhereAsync(x => x.AppUserId == userId)).FirstOrDefault();
+
+            if (session == null)
+                throw new Exception("Chat session not found");
+
+            var messageRepo = _unitOfWork.Repository<ChatMessage, Guid>();
+
+            var messages = await messageRepo.WhereAsync(x => x.SessionId == session.Id);
+
+            var orderedMessages = messages
+                .OrderBy(x => x.CreatedAt)
+                .TakeLast(20)
+                .Select(m => new ChatMessageDto
+                {
+                    Role = MapRole(m.Role),
+                    Content = m.Content,
+                    CreatedAt = m.CreatedAt
+                })
+                .ToList();
+
+            return new ChatDetailsDto
+            {
+                Title = session.Title,
+                Messages = orderedMessages
             };
         }
     }

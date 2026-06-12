@@ -17,26 +17,34 @@ namespace Finexa.API.Controllers
             _chatAppService = chatAppService;
         }
 
-        [HttpPost("create-session")]
-        public async Task<ActionResult<ChatSessionDto>> CreateSession([FromBody] string? title)
+        //[HttpPost("create-session")]
+        //public async Task<ActionResult<ChatSessionDto>> CreateSession([FromBody] string? title)
+        //{
+        //    var result = await _chatAppService.CreateSessionAsync(title);
+
+        //    return Ok(result);
+        //}
+
+        //[HttpGet("get-sessions")]
+        //public async Task<ActionResult<IReadOnlyList<ChatSessionDto>>> GetSessions()
+        //{
+        //    var result = await _chatAppService.GetMySessionsAsync();
+
+        //    return Ok(result);
+        //}
+
+        //[HttpGet("sessions/{sessionId}")]
+        //public async Task<ActionResult<ChatDetailsDto>> GetSessionDetails(Guid sessionId)
+        //{
+        //    var result = await _chatAppService.GetSessionDetailsAsync(sessionId);
+
+        //    return Ok(result);
+        //}
+
+        [HttpGet]
+        public async Task<ActionResult<ChatDetailsDto>> GetSessionDetails()
         {
-            var result = await _chatAppService.CreateSessionAsync(title);
-
-            return Ok(result);
-        }
-
-        [HttpGet("get-sessions")]
-        public async Task<ActionResult<IReadOnlyList<ChatSessionDto>>> GetSessions()
-        {
-            var result = await _chatAppService.GetMySessionsAsync();
-
-            return Ok(result);
-        }
-
-        [HttpGet("sessions/{sessionId}")]
-        public async Task<ActionResult<ChatDetailsDto>> GetSessionDetails(Guid sessionId)
-        {
-            var result = await _chatAppService.GetSessionDetailsAsync(sessionId);
+            var result = await _chatAppService.GetSessionDetailsAsync();
 
             return Ok(result);
         }

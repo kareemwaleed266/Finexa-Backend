@@ -4,13 +4,14 @@
     {
         public decimal Amount { get; set; }
 
-        public string? Currency { get; set; }
-        public string? CategoryName { get; set; } // 👈 اسم فقط
+        public string? CategoryName { get; set; } 
 
-        public string Type { get; set; } = default!; // "income" | "expense"
+        public string Type { get; set; } = default!;
 
         public string? Notes { get; set; }
 
         public DateTime? OccurredAt { get; set; }
+        public string? Merchant { get; set; }
+        public string? Item { get; set; }
     }
 }

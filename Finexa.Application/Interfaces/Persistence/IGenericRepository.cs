@@ -20,4 +20,6 @@ public interface IGenericRepository<TEntity, TKey>
 
     Task<bool> ExistsAsync(Expression<Func<TEntity, bool>> predicate);
     Task<IEnumerable<TEntity>> WhereAsync(Expression<Func<TEntity, bool>> predicate);
+
+    IQueryable<TEntity> Query(bool withTracking = false);
 }

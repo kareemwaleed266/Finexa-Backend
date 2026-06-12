@@ -10,7 +10,13 @@ namespace Finexa.Application.Modules.Identity.Interfaces
 {
     public interface IAuthService
     {
-        Task<AuthResponseDto> RegisterAsync(RegisterDto dto);
+        Task<string> RegisterAsync(RegisterDto dto);
         Task<AuthResponseDto> LoginAsync(LoginDto dto);
+        Task ConfirmEmailAsync(ConfirmEmailDto dto);
+        Task<AuthResponseDto> RefreshAsync();
+        Task LogoutAsync();
+        Task ForgotPasswordAsync(ForgotPasswordDto dto);
+        Task ResetPasswordAsync(ResetPasswordDto dto);
+        Task ResendConfirmationLinkAsync(string email);
     }
 }

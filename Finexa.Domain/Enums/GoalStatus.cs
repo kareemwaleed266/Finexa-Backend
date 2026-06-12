@@ -4,6 +4,7 @@
     {
         InProgress = 1,
         Completed = 2,
-        Canceled = 3
+        Canceled = 3,
+        Refunded = 4
     }
 }

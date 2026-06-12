@@ -1,9 +1,13 @@
-﻿using Finexa.Application.Interfaces.Persistence;
+﻿using Finexa.Application.Common.DTOs;
+using Finexa.Application.Common.Helpers;
+using Finexa.Application.Common.Models;
+using Finexa.Application.Interfaces.Persistence;
 using Finexa.Application.Modules.Goals.DTOs;
 using Finexa.Application.Modules.Goals.Interfaces;
 using Finexa.Application.Modules.Transactions.DTOs;
 using Finexa.Application.Modules.Transactions.Interfaces;
 using Finexa.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace Finexa.Application.Modules.Goals.Services
 {
@@ -49,19 +53,48 @@ namespace Finexa.Application.Modules.Goals.Services
 
             await _unitOfWork.SaveChangesAsync();
         }
-        public async Task<List<GoalDto>> GetGoalsAsync()
+        public async Task<PagedResult<GoalDto>> GetGoalsAsync(GoalFilterDto filter)
         {
             var userId = _currentUser.UserId;
 
             if (userId == Guid.Empty)
                 throw new UnauthorizedAccessException();
 
+            if (filter.PageNumber <= 0)
+                filter.PageNumber = 1;
+
+            if (filter.PageSize <= 0 || filter.PageSize > 50)
+                filter.PageSize = 10;
+
             var goalRepo = _unitOfWork.Repository<Goal, Guid>();
 
-            var goals = await goalRepo
-                .WhereAsync(g => g.AppUserId == userId);
+            var query = goalRepo.Query()
+                .Where(g => g.AppUserId == userId && !g.IsHidden);
 
-            return goals.Select(g => MapGoalToDto(g)).ToList();
+            if (filter.Status.HasValue)
+                query = query.Where(x => x.Status == filter.Status.Value);
+
+            var totalCount = await query.CountAsync();
+
+            query = ApplyGoalSorting(query, filter);
+
+            
+            var skip = (filter.PageNumber - 1) * filter.PageSize;
+
+            var goals = await query
+                .Skip(skip)
+                .Take(filter.PageSize)
+                .ToListAsync();
+
+            var items = goals.Select(g => MapGoalToDto(g)).ToList();
+
+            return new PagedResult<GoalDto>
+            {
+                Items = items,
+                PageNumber = filter.PageNumber,
+                PageSize = filter.PageSize,
+                TotalCount = totalCount
+            };
         }
         public async Task ContributeToGoalAsync(Guid goalId, GoalContributionDto dto)
         {
@@ -93,21 +126,24 @@ namespace Finexa.Application.Modules.Goals.Services
                 CategoryId = await GetGoalCategoryId(userId),
                 Notes = $"Contribution to goal: {goal.Title}",
                 OccurredAt = DateTime.UtcNow,
-                GoalId = goal.Id
+                Item = goal.Title
             };
 
-            await _transactionService.AddTransactionAsync(transactionDto, TransactionSource.Manual);
+            await _transactionService.AddTransactionAsync(transactionDto, TransactionSource.Manual,goal.Id);
 
             goal.AddContribution(dto.Amount);
 
             await _unitOfWork.SaveChangesAsync();
         }
-        public async Task<List<GoalHistoryDto>> GetGoalHistoryAsync(Guid goalId)
+        public async Task<PagedResult<GoalHistoryDto>> GetGoalHistoryAsync(Guid goalId, BaseFilterDto filter)
         {
             var userId = _currentUser.UserId;
 
             if (userId == Guid.Empty)
                 throw new UnauthorizedAccessException();
+
+            if (filter.PageNumber <= 0)
+                filter.PageNumber = 1;
 
             var goalRepo = _unitOfWork.Repository<Goal, Guid>();
             var transactionRepo = _unitOfWork.Repository<Transaction, Guid>();
@@ -117,18 +153,39 @@ namespace Finexa.Application.Modules.Goals.Services
             if (goal == null || goal.AppUserId != userId)
                 throw new Exception("Goal not found");
 
-            var transactions = await transactionRepo
-                .WhereAsync(t => t.GoalId == goalId);
+            var query = transactionRepo.Query()
+                .Where(t => t.GoalId == goalId);
 
-            return transactions
+            var totalCount = await query.CountAsync();
+
+            if (filter.PageSize <= 0 || filter.PageSize > 20)
+                filter.PageSize = 2;
+
+
+            var skip = (filter.PageNumber - 1) * filter.PageSize;
+
+            var transactions = await query
                 .OrderByDescending(t => t.OccurredAt)
-                .Select(t => new GoalHistoryDto
-                {
-                    Amount = t.Amount,
-                    Date = t.OccurredAt,
-                    Notes = t.Notes
-                })
-                .ToList();
+                .Skip(skip)
+                .Take(filter.PageSize)
+                .ToListAsync();
+
+            var items = transactions.Select(t => new GoalHistoryDto
+            {
+                Amount = t.Amount,
+                Date = DateTimeHelper.EnsureUtcKind(t.OccurredAt),
+                Notes = t.Notes,
+                Status = goal.Status
+
+            }).ToList();
+
+            return new PagedResult<GoalHistoryDto>
+            {
+                Items = items,
+                PageNumber = filter.PageNumber,
+                PageSize = filter.PageSize,
+                TotalCount = totalCount
+            };
         }
         public async Task<GoalDetailsDto> GetGoalDetailsAsync(Guid goalId)
         {
@@ -145,21 +202,12 @@ namespace Finexa.Application.Modules.Goals.Services
             if (goal == null || goal.AppUserId != userId)
                 throw new Exception("Goal not found");
 
-            // Get History
-            var transactions = await transactionRepo
-                .WhereAsync(t => t.GoalId == goalId);
+            var transactions = await transactionRepo.Query()
+            .Where(t => t.GoalId == goalId)
+            .OrderByDescending(t => t.OccurredAt)
+            .Take(5) 
+            .ToListAsync();
 
-            var history = transactions
-                .OrderByDescending(t => t.OccurredAt)
-                .Select(t => new GoalHistoryDto
-                {
-                    Amount = t.Amount,
-                    Date = t.OccurredAt,
-                    Notes = t.Notes
-                })
-                .ToList();
-
-            // Calculations
             var current = goal.CurrentAmount;
             var remaining = goal.GetRemainingAmount();
 
@@ -183,8 +231,8 @@ namespace Finexa.Application.Modules.Goals.Services
                 RemainingAmount = remaining,
                 ProgressPercentage = Math.Round(progress, 2),
                 MonthlyAmount = Math.Round(monthly, 2),
-                TargetDate = goal.TargetDate,
-                History = history
+                Status = goal.Status,
+                TargetDate = DateTimeHelper.EnsureUtcKind(goal.TargetDate)
             };
         }
         public async Task CancelGoalAsync(Guid goalId)
@@ -202,7 +250,7 @@ namespace Finexa.Application.Modules.Goals.Services
                 throw new Exception("Goal not found");
 
             if ( goal.Status == GoalStatus.Canceled)
-                throw new InvalidOperationException("Goal already canceled.");
+                throw new InvalidOperationException("Goal already canceled");
             goal.CancelGoal();
 
             await _unitOfWork.SaveChangesAsync();
@@ -225,28 +273,33 @@ namespace Finexa.Application.Modules.Goals.Services
             if (goal.IsRefunded)
                 throw new Exception("Goal already refunded");
 
+            if (goal.Status != GoalStatus.Canceled)
+                throw new Exception("Only canceled goals can be refunded");
+
             var contributions = await transactionRepo
                 .WhereAsync(t => t.GoalId == goalId);
 
             if (!contributions.Any())
-                throw new Exception("No contributions to refund");
+            {
+                goal.ResetAfterRefund();
+                await _unitOfWork.SaveChangesAsync();
+                return;
+            }                    
 
             var categoryId = await GetGoalCategoryId(userId);
 
             var totalRefund = contributions.Sum(t => t.Amount);
 
-            foreach (var t in contributions)
-            {
-                var dto = new CreateTransactionDto
-                {
-                    Amount = t.Amount,
-                    Type = TransactionType.Income,
-                    CategoryId = categoryId,
-                    Notes = $"Refund for goal: {goal.Title}"
-                };
 
-                await _transactionService.AddTransactionAsync(dto, TransactionSource.Manual);
-            }
+            var dto = new CreateTransactionDto
+            {
+                Amount = totalRefund,
+                Type = TransactionType.Income,
+                CategoryId = categoryId,
+                Notes = $"Refund for goal: {goal.Title}"
+            };
+
+            await _transactionService.AddTransactionAsync(dto, TransactionSource.Manual, null);
 
             goal.ResetAfterRefund();
 
@@ -301,7 +354,8 @@ namespace Finexa.Application.Modules.Goals.Services
                 RemainingAmount = remaining,
                 ProgressPercentage = Math.Round(progress, 2),
                 MonthlyAmount = Math.Round(monthly, 2),
-                TargetDate = goal.TargetDate
+                TargetDate = goal.TargetDate,
+                Status = goal.Status
             };
         }
 
@@ -327,6 +381,38 @@ namespace Finexa.Application.Modules.Goals.Services
                 throw new Exception("Goal category not found");
 
             return category.Id;
+        }
+
+
+        private IQueryable<Goal> ApplyGoalSorting(IQueryable<Goal> query, GoalFilterDto filter)
+        {
+            var desc = filter.SortDirection != SortDirection.Asc;
+
+            return filter.SortBy switch
+            {
+                GoalSortBy.TargetAmount => desc
+                    ? query.OrderByDescending(x => x.TargetAmount)
+                    : query.OrderBy(x => x.TargetAmount),
+
+                GoalSortBy.Progress => desc
+                    ? query.OrderByDescending(x =>
+                        x.TargetAmount == 0 ? 0 :
+                        (x.CurrentAmount / x.TargetAmount) * 100)
+                    : query.OrderBy(x =>
+                        x.TargetAmount == 0 ? 0 :
+                        (x.CurrentAmount / x.TargetAmount) * 100),
+
+                GoalSortBy.Status =>
+                     query.OrderBy(x =>
+                         x.Status == GoalStatus.InProgress ? 0 :
+                         x.Status == GoalStatus.Completed ? 1 :
+                         x.Status == GoalStatus.Refunded ? 2 :
+                         x.Status == GoalStatus.Canceled ? 3 : 4),
+
+                _ => desc
+                    ? query.OrderByDescending(x => x.CreatedAt)
+                    : query.OrderBy(x => x.CreatedAt)
+            };
         }
     }
 }

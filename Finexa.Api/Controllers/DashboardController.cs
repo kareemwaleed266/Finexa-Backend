@@ -1,4 +1,5 @@
-﻿using Finexa.Application.Modules.Dashboard.Interfaces;
+﻿using Finexa.Application.Modules.Dashboard.DTOs;
+using Finexa.Application.Modules.Dashboard.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,10 +18,9 @@ namespace Finexa.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetDashboard()
+        public async Task<IActionResult> GetDashboard([FromQuery] DashboardFilterDto filter)
         {
-            var result = await _dashboardService.GetDashboardAsync();
-
+            var result = await _dashboardService.GetDashboardAsync(filter);
             return Ok(result);
         }
 

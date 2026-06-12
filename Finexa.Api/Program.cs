@@ -1,12 +1,13 @@
+using System.Text.Json.Serialization;
+using Finexa.Api.BackgroundServices;
 using Finexa.Api.Extensions;
 using Finexa.Application;
+using Finexa.Application.Interfaces.Persistence;
+using Finexa.Domain.Entities.Identity;
 using Finexa.Infrastructure;
+using Finexa.Infrastructure.Persistence.Seed;
 using Finexa.Infrastructure.Security;
 using Finexa.Integration;
-using Finexa.Application.Interfaces.Persistence;
-using System.Text.Json.Serialization;
-using Finexa.Domain.Entities.Identity;
-using Finexa.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.Identity;
 
 namespace Finexa.Api
@@ -31,11 +32,6 @@ namespace Finexa.Api
                     .Add(new JsonStringEnumConverter());
             });
 
-            builder.Services.AddControllers(options =>
-            {
-                options.SuppressAsyncSuffixInActionNames = false;
-            });
-            builder.Services.AddJwtAuthentication(builder.Configuration);
 
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerDocumentation();
@@ -49,45 +45,48 @@ namespace Finexa.Api
             builder.Services.AddApplicationServices();
             builder.Services.AddInfrastructureServices(builder.Configuration);
             builder.Services.AddIntegrationServices(builder.Configuration);
+            builder.Services.AddJwtAuthentication(builder.Configuration);
+
+            builder.Services.AddHostedService<BillOccurrenceGenerationBackgroundService>();
+
+            builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+            {
+                options.TokenLifespan = TimeSpan.FromHours(1);
+            });
 
             #endregion
 
             var app = builder.Build();
 
-            // Initialize Database
             using (var scope = app.Services.CreateScope())
             {
                 var initializer = scope.ServiceProvider
                     .GetRequiredService<IFinexaContextInitializer>();
 
                 await initializer.InitializeAsync();
-            }
 
-            using (var scope = app.Services.CreateScope())
-            {
-                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
+                var roleManager = scope.ServiceProvider
+                    .GetRequiredService<RoleManager<AppRole>>();
 
                 await RoleSeeder.SeedAsync(roleManager);
-            }
 
-            using (var scope = app.Services.CreateScope())
-            {
-                var context = scope.ServiceProvider.GetRequiredService<FinexaDbContext>();
+                var context = scope.ServiceProvider
+                    .GetRequiredService<FinexaDbContext>();
 
                 await CategorySeeder.SeedAsync(context);
+
+                await AdminSeeder.SeedAsync(scope.ServiceProvider);
             }
+
             #region Configure Middlewares
 
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseSwaggerDocumentation();
-            }
+            app.UseSwaggerDocumentation();
 
             app.UseGlobalErrorHandler();
 
             app.UseHttpsRedirection();
 
-            app.UseCors("AllowAll");
+            app.UseCors("Frontend");
 
             app.UseAuthentication();
             app.UseAuthorization();

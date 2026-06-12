@@ -6,5 +6,6 @@ namespace Finexa.Application.Modules.Categories.Interfaces
     {
         Task<List<CategoryDto>> GetCategoriesAsync();
         Task CreateCategoryAsync(CreateCategoryDto dto);
+        Task<List<CategoryDto>> GetBillCategoriesAsync();
     }
 }

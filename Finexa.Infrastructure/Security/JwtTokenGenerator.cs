@@ -28,29 +28,35 @@ public class JwtTokenGenerator : IJwtTokenGenerator
             key,
             SecurityAlgorithms.HmacSha256);
 
-        // 🔥 Get roles
         var roles = await _userManager.GetRolesAsync(user);
 
-        // 🔥 Claims
         var claims = new List<Claim>
         {
-        // Identity
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            // Important for getting current user id
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.UserName!),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email!),
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+
+            // Email
+            new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+
+            // Username
+            new Claim(ClaimTypes.Name, user.UserName ?? string.Empty),
+            new Claim("username", user.UserName ?? string.Empty),
 
             // Token metadata
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim(JwtRegisteredClaimNames.Iat,
+            new Claim(
+                JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
 
-        // 🔥 Add roles to claims
         foreach (var role in roles)
         {
             claims.Add(new Claim(ClaimTypes.Role, role));
+
+            claims.Add(new Claim("role", role));
         }
 
         var token = new JwtSecurityToken(

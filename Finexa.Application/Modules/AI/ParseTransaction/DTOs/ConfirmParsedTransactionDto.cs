@@ -17,5 +17,7 @@ namespace Finexa.Application.Modules.AI.ParseTransaction.DTOs
         public string? Notes { get; set; }
 
         public DateTime? OccurredAt { get; set; }
+        public string? Merchant { get; set; }
+        public string? Item { get; set; }
     }
 }

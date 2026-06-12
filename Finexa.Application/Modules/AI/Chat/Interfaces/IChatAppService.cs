@@ -8,7 +8,8 @@ namespace Finexa.Application.Modules.AI.Chat.Interfaces
 
         Task<IReadOnlyList<ChatSessionDto>> GetMySessionsAsync();
 
-        Task<ChatDetailsDto> GetSessionDetailsAsync(Guid sessionId);
+        //Task<ChatDetailsDto> GetSessionDetailsAsync(Guid sessionId);
+        Task<ChatDetailsDto> GetSessionDetailsAsync();
 
         Task<SendMessageResponseDto> SendMessageAsync(SendMessageDto dto);
     }

@@ -16,10 +16,15 @@ namespace Finexa.Domain.Entities.Identity
         public DateTime? DateOfBirth { get; set; }
 
         public string? ProfileImageUrl { get; set; }
+        public string? ProfileImagePublicId { get; set; }
         //public bool IsActive { get; set; } = true;
 
         public virtual UserBalance? UserBalance { get; set; }
+        public bool IsActive { get; set; } = true;
 
+        public DateTime? DeactivatedAt { get; set; }
+
+        public string? DeactivationReason { get; set; }
         public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
         public virtual ICollection<Goal> Goals { get; set; } = new List<Goal>();
         //public virtual ICollection<SavingPlan> SavingPlans { get; set; } = new List<SavingPlan>();

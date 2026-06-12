@@ -1,6 +1,7 @@
 ﻿using System.Net.Http.Json;
 using Finexa.Application.Modules.AI.Chat.DTOs;
 using Finexa.Application.Modules.AI.Chat.Interfaces;
+using Finexa.Application.Modules.AI.ParseTransaction.DTOs;
 using Finexa.Integration.AI.Chat.Models;
 
 namespace Finexa.Integration.AI.Chat
@@ -33,8 +34,15 @@ namespace Finexa.Integration.AI.Chat
             // Call API
             var response = await _httpClient.PostAsJsonAsync("/api/chat", apiRequest);
 
+            //if (!response.IsSuccessStatusCode)
+            //    throw new Exception("AI Service failed");
+            var content = await response.Content.ReadAsStringAsync();
+
             if (!response.IsSuccessStatusCode)
-                throw new Exception("AI Service failed");
+            {
+                throw new Exception($"AI Service failed: {response.StatusCode} - {content}");
+            }
+
 
             var apiResponse = await response.Content.ReadFromJsonAsync<ChatApiResponse>();
 
@@ -47,6 +55,8 @@ namespace Finexa.Integration.AI.Chat
                 Reply = apiResponse.Reply,
                 Summary = apiResponse.Summary,
                 SummaryUpdated = apiResponse.Summary_Updated,
+                Transactions = apiResponse.Transactions ?? new List<ParsedTransactionItemDto>()
+
                 //Intent = apiResponse.Intent,
                 //ToolCalled = apiResponse.Tool_Called
             };

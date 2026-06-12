@@ -52,5 +52,12 @@ namespace Finexa.Infrastructure.Persistence.Repositories
                 .Where(predicate)
                 .ToListAsync();
         }
+
+        public IQueryable<TEntity> Query(bool withTracking = false)
+        {
+            return withTracking
+                ? _context.Set<TEntity>()
+                : _context.Set<TEntity>().AsNoTracking();
+        }
     }
 }

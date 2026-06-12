@@ -4,7 +4,7 @@ namespace Finexa.Application.Modules.Dashboard.Interfaces
 {
     public interface IDashboardService
     {
-        Task<DashboardSummaryDto> GetDashboardAsync();
+        Task<DashboardSummaryDto> GetDashboardAsync(DashboardFilterDto filter);
         Task RebuildBalanceAsync();
     }
 }

@@ -1,7 +1,9 @@
-﻿using Finexa.Application.Interfaces.Persistence;
+﻿using Finexa.Application.Common.Helpers;
+using Finexa.Application.Interfaces.Persistence;
 using Finexa.Application.Modules.Dashboard.DTOs;
 using Finexa.Application.Modules.Dashboard.Interfaces;
 using Finexa.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 public class DashboardService : IDashboardService
 {
@@ -14,32 +16,91 @@ public class DashboardService : IDashboardService
         _currentUser = currentUser;
     }
 
-    public async Task<DashboardSummaryDto> GetDashboardAsync()
+    public async Task<DashboardSummaryDto> GetDashboardAsync(DashboardFilterDto filter)
     {
         var userId = _currentUser.UserId;
 
         if (userId == Guid.Empty)
             throw new UnauthorizedAccessException();
 
-        var transactions = await GetUserTransactions(userId);
-        var goals = await GetUserGoals(userId);
+        var (from, to) = DateRangeHelper.GetRange(
+            filter.Period,
+            filter.From,
+            filter.To
+        );
+
+        var transactions = await GetUserTransactions(userId, from, to);
+
+        //var goals = await GetUserGoals(userId);
         var balance = await GetUserBalance(userId);
 
         var categories = await GetCategoriesMap(transactions);
 
-        var (income, expense, totalBalance) = CalculateTotals(transactions, balance);
+        var income = transactions
+            .Where(x => x.Type == TransactionType.Income)
+            .Sum(x => x.Amount);
 
-        var recentTransactions = MapRecentTransactions(transactions, categories);
+        var expense = transactions
+            .Where(x => x.Type == TransactionType.Expense)
+            .Sum(x => x.Amount);
 
-        var goalsDto = MapGoals(goals);
+        var savings = income - expense;
+
+        var (prevFrom, prevTo) = GetPreviousDateRange(from, to);
+
+        var prevTransactions = await GetUserTransactions(userId, prevFrom, prevTo);
+
+        var prevCategories = await GetCategoriesMap(prevTransactions);
+
+        var prevBreakdown = prevTransactions
+            .Where(t => t.Type == TransactionType.Expense)
+            .GroupBy(t => t.CategoryId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Sum(x => x.Amount)
+            );
+
+        var prevIncome = prevTransactions
+            .Where(x => x.Type == TransactionType.Income)
+            .Sum(x => x.Amount);
+
+        var prevExpense = prevTransactions
+            .Where(x => x.Type == TransactionType.Expense)
+            .Sum(x => x.Amount);
+
+        var prevSavings = prevIncome - prevExpense;
+
+        var incomeChange = FormatChange(income, prevIncome);
+        var expenseChange = FormatChange(expense, prevExpense);
+        var savingsChange = FormatChange(savings, prevSavings);
+
+        var totalBalance = balance?.TotalBalance ?? 0;
+
+        //var recentTransactions = MapRecentTransactions(transactions, categories);
+        //var goalsDto = MapGoals(goals);
+
+        var expenseBreakdown = GetExpenseBreakdown(transactions, categories, prevBreakdown);
+
+        var moneyFlow = GetMoneyFlow(transactions, filter.Period);
 
         return new DashboardSummaryDto
         {
             TotalBalance = totalBalance,
             TotalIncome = income,
             TotalExpense = expense,
-            RecentTransactions = recentTransactions,
-            Goals = goalsDto
+            TotalSavings = savings,
+
+            IncomeChangePercentage = incomeChange,
+            ExpenseChangePercentage = expenseChange,
+            SavingsChangePercentage = savingsChange,
+
+
+            From = DateTimeHelper.EnsureUtcKind(from),
+            To = DateTimeHelper.EnsureUtcKind(to),
+
+
+            ExpenseBreakdown = expenseBreakdown,
+            MoneyFlow = moneyFlow
         };
     }
     public async Task RebuildBalanceAsync()
@@ -87,14 +148,156 @@ public class DashboardService : IDashboardService
         await _unitOfWork.SaveChangesAsync();
     }
 
-
-    private async Task<List<Transaction>> GetUserTransactions(Guid userId)
+    private (DateTime from, DateTime to) GetPreviousDateRange(DateTime currentFrom, DateTime currentTo)
     {
-        var transactions = _unitOfWork.Repository<Transaction, Guid>();
+        var duration = currentTo - currentFrom;
+        var prevTo = currentFrom.AddTicks(-1); 
+        var prevFrom = prevTo - duration;
 
-        return (await transactions.WhereAsync(x => x.AppUserId == userId)).ToList();
+        return (prevFrom, prevTo);
     }
 
+    private decimal CalculatePercentageChange(decimal current, decimal previous)
+    {
+        if (previous == 0)
+            return current > 0 ? 100 : 0;
+
+        var change = ((current - previous) / previous) * 100;
+
+        change = Math.Min(change, 100);
+        change = Math.Max(change, -100);
+
+        return Math.Round(change, 1);
+    }
+
+    private ChangeDto FormatChange(decimal current, decimal previous)
+    {
+        var change = CalculatePercentageChange(current, previous);
+
+        string label;
+        string trend;
+
+        if (change > 0)
+        {
+            trend = "up";
+
+            label = change switch
+            {
+                >= 80 => $"+{change}% (High increase)",
+                >= 30 => $"+{change}% (Moderate increase)",
+                _ => $"+{change}%"
+            };
+        }
+        else if (change < 0)
+        {
+            trend = "down";
+
+            label = change switch
+            {
+                <= -80 => $"{change}% (High decrease)",
+                <= -30 => $"{change}% (Moderate decrease)",
+                _ => $"{change}%"
+            };
+        }
+        else
+        {
+            trend = "neutral";
+            label = "0%";
+        }
+
+        return new ChangeDto
+        {
+            Value = change,
+            Label = label,
+            Trend = trend
+        };
+    }
+    private List<CategoryBreakdownDto> GetExpenseBreakdown(
+    List<Transaction> transactions,
+    Dictionary<Guid, string> categories,
+    Dictionary<Guid, decimal> prevBreakdown)
+    {
+        return transactions
+            .Where(t => t.Type == TransactionType.Expense)
+            .GroupBy(t => t.CategoryId)
+            .Select(g =>
+            {
+                var currentAmount = g.Sum(x => x.Amount);
+
+                prevBreakdown.TryGetValue(g.Key, out var prevAmount);
+
+
+                var change = FormatChange(currentAmount, prevAmount);
+
+                return new CategoryBreakdownDto
+                {
+                    CategoryName = categories.TryGetValue(g.Key, out var name)
+                        ? name
+                        : "Unknown",
+
+                    Amount = currentAmount,
+                    Change = change
+                };
+            })
+            .OrderByDescending(x => x.Amount)
+            .ToList();
+    }
+
+
+    private List<MoneyFlowDto> GetMoneyFlow(List<Transaction> transactions, PeriodType period)
+    {
+        var egyptTimeZone = DateTimeHelper.GetEgyptTimeZone();
+
+        if (period == PeriodType.Year)
+        {
+            return transactions
+                .GroupBy(t =>
+                {
+                    var localDate = TimeZoneInfo.ConvertTimeFromUtc(
+                        DateTimeHelper.EnsureUtcKind(t.OccurredAt),
+                        egyptTimeZone);
+
+                    return new DateTime(localDate.Year, localDate.Month, 1);
+                })
+                .OrderBy(g => g.Key)
+                .Select(g => new MoneyFlowDto
+                {
+                    Label = $"{g.Key.Month}/{g.Key.Year}",
+                    Income = g.Where(x => x.Type == TransactionType.Income).Sum(x => x.Amount),
+                    Expense = g.Where(x => x.Type == TransactionType.Expense).Sum(x => x.Amount)
+                })
+                .ToList();
+        }
+
+        return transactions
+            .GroupBy(t =>
+            {
+                var localDate = TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTimeHelper.EnsureUtcKind(t.OccurredAt),
+                    egyptTimeZone);
+
+                return localDate.Date;
+            })
+            .OrderBy(g => g.Key)
+            .Select(g => new MoneyFlowDto
+            {
+                Label = g.Key.ToString("dd MMM"),
+                Income = g.Where(x => x.Type == TransactionType.Income).Sum(x => x.Amount),
+                Expense = g.Where(x => x.Type == TransactionType.Expense).Sum(x => x.Amount)
+            })
+            .ToList();
+    }
+    private async Task<List<Transaction>> GetUserTransactions(Guid userId, DateTime from, DateTime to)
+    {
+        var transactionRepo = _unitOfWork.Repository<Transaction, Guid>();
+
+        return await transactionRepo.Query()
+            .Where(x =>
+                x.AppUserId == userId &&
+                x.OccurredAt >= from &&
+                x.OccurredAt <= to)
+            .ToListAsync();
+    }
     private async Task<List<Goal>> GetUserGoals(Guid userId)
     {
         var goals = _unitOfWork.Repository<Goal, Guid>();
@@ -116,46 +319,17 @@ public class DashboardService : IDashboardService
             .Distinct()
             .ToList();
 
-        var category = _unitOfWork.Repository<Category, Guid>();
+        if (!categoryIds.Any())
+            return new Dictionary<Guid, string>();
 
-        var categories = await category.WhereAsync(c => categoryIds.Contains(c.Id));
+        var categoryRepo = _unitOfWork.Repository<Category, Guid>();
+
+        var categories = await categoryRepo.Query()
+            .Where(c => categoryIds.Contains(c.Id))
+            .ToListAsync();
 
         return categories.ToDictionary(c => c.Id, c => c.Name);
     }
-
-
-
-    private (decimal income, decimal expense, decimal balance) CalculateTotals(
-     List<Transaction> transactions,
-     UserBalance? balance)
-    {
-        decimal income;
-        decimal expense;
-        decimal totalBalance;
-
-        if (balance != null && (balance.TotalIncome != 0 || balance.TotalExpense != 0))
-        {
-            income = balance.TotalIncome;
-            expense = balance.TotalExpense;
-            totalBalance = balance.TotalBalance;
-        }
-        else
-        {
-            income = transactions
-                .Where(x => x.Type == TransactionType.Income)
-                .Sum(x => x.Amount);
-
-            expense = transactions
-                .Where(x => x.Type == TransactionType.Expense)
-                .Sum(x => x.Amount);
-
-            totalBalance = income - expense;
-        }
-
-        return (income, expense, totalBalance);
-    }
-
-
     private List<RecentTransactionDto> MapRecentTransactions(
         List<Transaction> transactions,
         Dictionary<Guid, string> categories)

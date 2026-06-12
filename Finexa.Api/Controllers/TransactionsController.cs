@@ -1,4 +1,6 @@
-﻿using Finexa.Application.Modules.AI.ParseTransaction.DTOs;
+﻿using Finexa.Application.Modules.AI.OCR.Interfaces;
+using Finexa.Application.Modules.AI.ParseTransaction.DTOs;
+using Finexa.Application.Modules.AI.ParseTransaction.Interfaces;
 using Finexa.Application.Modules.Transactions.DTOs;
 using Finexa.Application.Modules.Transactions.Interfaces;
 using Finexa.Domain.Enums;
@@ -13,63 +15,106 @@ namespace Finexa.Api.Controllers
     public class TransactionController : ControllerBase
     {
         private readonly ITransactionService _transactionService;
+        private readonly IParseTransactionAppService _parseAppService;
+        private readonly IOcrAppService _ocrAppService;
 
-        public TransactionController(ITransactionService transactionService)
+        public TransactionController(ITransactionService transactionService, IParseTransactionAppService parseAppService, IOcrAppService ocrAppService)
         {
             _transactionService = transactionService;
+            _parseAppService = parseAppService;
+            _ocrAppService = ocrAppService;
         }
 
         [HttpPost("add-transaction")]
-        public async Task<IActionResult> AddTransaction([FromBody]CreateTransactionDto dto)
+        public async Task<IActionResult> AddTransaction([FromBody] CreateTransactionDto dto)
         {
-            await _transactionService.AddTransactionAsync(dto, TransactionSource.Manual);
+            await _transactionService.AddTransactionAsync(dto, TransactionSource.Manual, null);
 
             return Ok(new { message = "Transaction created successfully" });
         }
 
-        [HttpPost("from-chat")]
+        /*[HttpPost("from-chat")]
         public async Task<IActionResult> AddFromChat(CreateTransactionDto dto)
         {
-            await _transactionService.AddTransactionAsync(dto, TransactionSource.Chat);
+            await _transactionService.AddTransactionAsync(dto, TransactionSource.Chat, null);
 
             return Ok(new { message = "Transaction created from chat" });
         }
+        */
 
-        [HttpPost("from-ocr")]
-        public async Task<IActionResult> AddFromOcr(
-                        [FromBody] List<ConfirmParsedTransactionDto> dtos)
-        {
-            var createDtos = await _transactionService
-                .ConfirmTransactionsAsync(dtos);
+        //[HttpPost("from-ocr")]
+        //public async Task<IActionResult> AddFromOcr(
+        //                [FromBody] List<ConfirmParsedTransactionDto> dtos)
+        //{
+        //    var createDtos = await _transactionService
+        //        .ConfirmTransactionsAsync(dtos);
 
-            foreach (var dto in createDtos)
-            {
-                await _transactionService.AddTransactionAsync(
-                    dto,
-                    TransactionSource.OCR
-                );
-            }
+        //    foreach (var dto in createDtos)
+        //    {
+        //        await _transactionService.AddTransactionAsync(
+        //            dto,
+        //            TransactionSource.OCR
+        //        );
+        //    }                 
 
-            return Ok(new { message = "Transaction created from OCR" });
-        }
+        //    return Ok(new { message = "Transaction created from OCR" });
+        //}
+
+        //[HttpPost("from-speech")]
+        //public async Task<IActionResult> AddFromSpeech(CreateTransactionDto dto)
+        //{
+        //    await _transactionService.AddTransactionAsync(dto, TransactionSource.Speech, null);
+
+        //    return Ok(new { message = "Transactions created successfully" });
+        //}
 
         [HttpPost("from-speech")]
-        public async Task<IActionResult> AddFromSpeech(List<ConfirmParsedTransactionDto> dtos)
+        public async Task<IActionResult> AddFromSpeech([FromBody] ParseRequestDto request)
         {
+            var parsed = await _parseAppService.ParseAsync(request.Text);
 
-            var createDtos = await _transactionService
-                .ConfirmTransactionsAsync(dtos);
-
-            foreach (var dto in createDtos)
+            if (parsed.Transactions == null || !parsed.Transactions.Any())
             {
-                await _transactionService.AddTransactionAsync(
-                    dto,
-                    TransactionSource.Speech
-                );
+                return Ok(new
+                {
+                    message = "No transactions detected",
+                    count = 0
+                });
             }
 
-            return Ok(new { message = "Transactions created successfully" });
+            var createdCount = await _transactionService.AddParsedTransactionsAsync(
+                parsed.Transactions,
+                TransactionSource.Speech);
+
+            return Ok(new
+            {
+                message = "Transactions created successfully",
+                count = createdCount
+            });
         }
+
+        [HttpPost("from-ocr")]
+        public async Task<IActionResult> ProcessReceipt(IFormFile file)
+        {
+            await _ocrAppService.ProcessReceiptAsync(file);
+
+            return Ok(new
+            {
+                message = "Transaction created from OCR successfully"
+            });
+        }
+        //[HttpPost("confirm-transaction")]
+        //public async Task<IActionResult> ConfirmTransaction([FromBody] ConfirmParsedTransactionDto dto)
+        //{
+        //    var result = await _transactionService.ConfirmTransactionsAsync(dto);
+
+        //    return Ok(new
+        //    {
+        //        message = "Transaction is valid",
+        //        data = result
+        //    });
+        //}
+
 
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateTransaction(Guid id, UpdateTransactionDto dto)

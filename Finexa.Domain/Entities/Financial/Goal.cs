@@ -15,6 +15,7 @@
 
     public string? Description { get; set; }
     public bool IsRefunded { get; private set; }
+    public bool IsHidden { get; set; } = false;
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
     public void AddContribution(decimal amount)
     {
@@ -57,7 +58,9 @@
             throw new InvalidOperationException("Goal already refunded");
 
         CurrentAmount = 0;
-        Status = GoalStatus.Canceled;
+        Status = GoalStatus.Refunded;
         IsRefunded = true;
+
+        IsHidden = true;
     }
 }
