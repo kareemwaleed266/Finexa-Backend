@@ -34,14 +34,12 @@ namespace Finexa.Integration.AI.SavingPlan.Models
         [JsonPropertyName("difficulty")]
         public string Difficulty { get; set; } = "Medium";
 
-        // AI returns planStatus, but the application DTO uses PlanStatusLabel.
         [JsonPropertyName("planStatus")]
         public string PlanStatusLabel { get; set; } = string.Empty;
 
         [JsonPropertyName("summaryMessage")]
         public string SummaryMessage { get; set; } = string.Empty;
 
-        // AI returns recommendations, but the application DTO/entity uses Items.
         [JsonPropertyName("recommendations")]
         public List<SavingPlanRecommendationApiModel> Items { get; set; } = new();
 

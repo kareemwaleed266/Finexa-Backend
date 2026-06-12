@@ -2,6 +2,7 @@
 using Finexa.Domain.Entities.Ai.Chat;
 using Finexa.Domain.Entities.Financial;
 using Finexa.Domain.Entities.Identity;
+using Finexa.Domain.Entities.Notifications;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 public class FinexaDbContext
@@ -48,4 +49,7 @@ public class FinexaDbContext
     // Admin
     public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
     public DbSet<SystemJobLog> SystemJobLogs { get; set; }
+
+    // Notifications
+    public DbSet<Notification> Notifications { get; set; }
 }

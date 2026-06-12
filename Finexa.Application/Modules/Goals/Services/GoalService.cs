@@ -251,6 +251,7 @@ namespace Finexa.Application.Modules.Goals.Services
 
             if ( goal.Status == GoalStatus.Canceled)
                 throw new InvalidOperationException("Goal already canceled");
+
             goal.CancelGoal();
 
             await _unitOfWork.SaveChangesAsync();
@@ -287,6 +288,7 @@ namespace Finexa.Application.Modules.Goals.Services
             }                    
 
             var categoryId = await GetGoalCategoryId(userId);
+            var refundCategory = await GetBalanceAdjustmentCategoryAsync(userId);
 
             var totalRefund = contributions.Sum(t => t.Amount);
 
@@ -294,8 +296,9 @@ namespace Finexa.Application.Modules.Goals.Services
             var dto = new CreateTransactionDto
             {
                 Amount = totalRefund,
+                Item = $"{goal.Title} Refund",
                 Type = TransactionType.Income,
-                CategoryId = categoryId,
+                CategoryId = refundCategory.Id,
                 Notes = $"Refund for goal: {goal.Title}"
             };
 
@@ -383,7 +386,21 @@ namespace Finexa.Application.Modules.Goals.Services
             return category.Id;
         }
 
+        private async Task<Category> GetBalanceAdjustmentCategoryAsync(Guid userId)
+        {
+            var category = await _unitOfWork.Repository<Category, Guid>()
+                .Query()
+                .FirstOrDefaultAsync(c =>
+                    c.IsActive &&
+                    c.Name == "Balance Adjustment" &&
+                    c.Type == TransactionType.Income &&
+                    (c.AppUserId == null || c.AppUserId == userId));
 
+            if (category == null)
+                throw new KeyNotFoundException("Balance Adjustment category not found");
+
+            return category;
+        }
         private IQueryable<Goal> ApplyGoalSorting(IQueryable<Goal> query, GoalFilterDto filter)
         {
             var desc = filter.SortDirection != SortDirection.Asc;

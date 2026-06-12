@@ -27,26 +27,71 @@ namespace Finexa.Infrastructure.Security
 
             services.AddAuthentication(options =>
             {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultAuthenticateScheme =
+                    JwtBearerDefaults.AuthenticationScheme;
+
+                options.DefaultChallengeScheme =
+                    JwtBearerDefaults.AuthenticationScheme;
             })
             .AddJwtBearer(options =>
             {
-                options.TokenValidationParameters = new TokenValidationParameters
+                options.TokenValidationParameters =
+                    new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+
+                        ValidIssuer = jwtSettings.Issuer,
+                        ValidAudience = jwtSettings.Audience,
+
+                        IssuerSigningKey = new SymmetricSecurityKey(
+                            Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+
+                        ClockSkew = TimeSpan.Zero,
+
+                        NameClaimType = ClaimTypes.NameIdentifier,
+                        RoleClaimType = ClaimTypes.Role
+                    };
+
+                options.Events = new JwtBearerEvents
                 {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
+                    OnTokenValidated = context =>
+                    {
+                        var identity = context.Principal?.Identity
+                            as ClaimsIdentity;
 
-                    ValidIssuer = jwtSettings.Issuer,
-                    ValidAudience = jwtSettings.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+                        if (identity == null)
+                            return Task.CompletedTask;
 
-                    NameClaimType = ClaimTypes.NameIdentifier,
-                    RoleClaimType = ClaimTypes.Role
+                        var sub = identity.FindFirst("sub")?.Value;
+
+                        if (!string.IsNullOrWhiteSpace(sub) &&
+                            identity.FindFirst(ClaimTypes.NameIdentifier) == null)
+                        {
+                            identity.AddClaim(
+                                new Claim(ClaimTypes.NameIdentifier, sub));
+                        }
+
+                        return Task.CompletedTask;
+                    },
+
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken =
+                            context.Request.Query["access_token"];
+
+                        var path = context.HttpContext.Request.Path;
+
+                        if (!string.IsNullOrWhiteSpace(accessToken) &&
+                            path.StartsWithSegments("/hubs/notifications"))
+                        {
+                            context.Token = accessToken;
+                        }
+
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

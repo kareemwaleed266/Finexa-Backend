@@ -592,7 +592,7 @@ namespace Finexa.Application.Modules.Transactions.Services
             if (category.AppUserId != null && category.AppUserId != userId)
                 throw new UnauthorizedAccessException("Unauthorized category");
 
-            if (category.Type != transactionType)
+            if (category.Type != transactionType  )
                 throw new InvalidOperationException("Category type does not match transaction type");
 
             return category;

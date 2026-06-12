@@ -34,6 +34,8 @@ using Finexa.Application.Modules.Admin.Interfaces;
 using Finexa.Application.Modules.Admin.Services;
 using Finexa.Application.Modules.SavingPlans.Interfaces;
 using Finexa.Application.Modules.SavingPlans.Services;
+using Finexa.Application.Modules.Notifications.Interfaces;
+using Finexa.Application.Modules.Notifications.Services;
 
 namespace Finexa.Infrastructure
 {
@@ -125,6 +127,10 @@ namespace Finexa.Infrastructure
 
             // saving plan services
             services.AddScoped<ISavingPlanService, SavingPlanService>();
+
+            // Notification services
+            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<INotificationSchedulerService, NotificationSchedulerService>();
 
             return services;
         }

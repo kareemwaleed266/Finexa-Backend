@@ -13,7 +13,14 @@ namespace Finexa.Infrastructure.Persistence.Data.Configurations.BillConfig
             builder.Property(b => b.Name)
                 .IsRequired()
                 .HasMaxLength(150);
+            builder.Property(x => x.IsDeleted)
+                .IsRequired()
+                .HasDefaultValue(false);
 
+            builder.Property(x => x.DeletedAt)
+                .IsRequired(false);
+
+            builder.HasIndex(x => new { x.AppUserId, x.IsDeleted });
             builder.Property(b => b.Description)
                 .HasMaxLength(500);
 

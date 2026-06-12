@@ -1,14 +1,18 @@
 using System.Text.Json.Serialization;
 using Finexa.Api.BackgroundServices;
 using Finexa.Api.Extensions;
+using Finexa.Api.Hubs;
+using Finexa.Api.Realtime;
 using Finexa.Application;
 using Finexa.Application.Interfaces.Persistence;
+using Finexa.Application.Modules.Notifications.Interfaces;
 using Finexa.Domain.Entities.Identity;
 using Finexa.Infrastructure;
 using Finexa.Infrastructure.Persistence.Seed;
 using Finexa.Infrastructure.Security;
 using Finexa.Integration;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Finexa.Api
 {
@@ -54,6 +58,12 @@ namespace Finexa.Api
                 options.TokenLifespan = TimeSpan.FromHours(1);
             });
 
+            builder.Services.AddSignalR();
+
+            builder.Services.AddSingleton<IUserIdProvider, SignalRUserIdProvider>();
+
+            builder.Services.AddScoped<INotificationRealtimeSender, SignalRNotificationSender>();
+            builder.Services.AddHostedService<NotificationBackgroundService>();
             #endregion
 
             var app = builder.Build();
@@ -92,6 +102,7 @@ namespace Finexa.Api
             app.UseAuthorization();
 
             app.MapControllers();
+            app.MapHub<NotificationHub>("/hubs/notifications");
 
             #endregion
 

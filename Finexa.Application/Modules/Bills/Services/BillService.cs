@@ -3,6 +3,8 @@ using Finexa.Application.Common.Models;
 using Finexa.Application.Interfaces.Persistence;
 using Finexa.Application.Modules.Bills.DTOs;
 using Finexa.Application.Modules.Bills.Interfaces;
+using Finexa.Application.Modules.Notifications.DTOs;
+using Finexa.Application.Modules.Notifications.Interfaces;
 using Finexa.Domain.Entities;
 using Finexa.Domain.Entities.Financial;
 using Finexa.Domain.Enums;
@@ -14,15 +16,16 @@ namespace Finexa.Application.Modules.Bills.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly ICurrentUserService _currentUserService;
-
+        private readonly INotificationService _notificationService;
         public BillService(
-            IUnitOfWork unitOfWork,
-            ICurrentUserService currentUserService)
+        IUnitOfWork unitOfWork,
+        ICurrentUserService currentUserService,
+        INotificationService notificationService)
         {
             _unitOfWork = unitOfWork;
             _currentUserService = currentUserService;
+            _notificationService = notificationService;
         }
-
         public async Task<Guid> CreateBillSeriesAsync(CreateBillSeriesDto dto)
         {
             var userId = GetCurrentUserId();
@@ -118,28 +121,55 @@ namespace Finexa.Application.Modules.Bills.Services
 
             var billSeries = await _unitOfWork.Repository<BillSeries, Guid>()
                 .Query(withTracking: true)
-                .FirstOrDefaultAsync(b => b.Id == billSeriesId && b.AppUserId == userId);
+                .Include(b => b.Occurrences)
+                .FirstOrDefaultAsync(b =>
+                    b.Id == billSeriesId &&
+                    b.AppUserId == userId &&
+                    !b.IsDeleted);
 
             if (billSeries == null)
                 throw new KeyNotFoundException("Bill not found");
 
-            billSeries.IsActive = false;
-            billSeries.LastModifiedBy = GetAuditUser();
-
-            var futureOccurrences = await _unitOfWork.Repository<BillOccurrence, Guid>()
-                .Query(withTracking: true)
-                .Where(o =>
-                    o.BillSeriesId == billSeriesId &&
-                    o.AppUserId == userId &&
-                    o.Status == BillOccurrenceStatus.Scheduled &&
-                    o.DueDate >= DateTime.UtcNow)
+            var occurrenceIdsWithPayments = await _unitOfWork.Repository<BillPayment, Guid>()
+                .Query()
+                .Where(p =>
+                    p.BillSeriesId == billSeriesId &&
+                    p.AppUserId == userId)
+                .Select(p => p.BillOccurrenceId)
                 .ToListAsync();
 
-            foreach (var occurrence in futureOccurrences)
+            var hasAnyPayments = occurrenceIdsWithPayments.Any();
+
+            if (!hasAnyPayments)
             {
-                occurrence.Status = BillOccurrenceStatus.Cancelled;
-                occurrence.LastModifiedBy = GetAuditUser();
+                foreach (var occurrence in billSeries.Occurrences.ToList())
+                {
+                    _unitOfWork.Repository<BillOccurrence, Guid>()
+                        .Delete(occurrence);
+                }
+
+                _unitOfWork.Repository<BillSeries, Guid>()
+                    .Delete(billSeries);
+
+                await _unitOfWork.SaveChangesAsync();
+                return;
             }
+
+            foreach (var occurrence in billSeries.Occurrences.ToList())
+            {
+                var hasPayment = occurrenceIdsWithPayments.Contains(occurrence.Id);
+
+                if (hasPayment)
+                    continue;
+
+                _unitOfWork.Repository<BillOccurrence, Guid>()
+                    .Delete(occurrence);
+            }
+
+            billSeries.IsActive = false;
+            billSeries.IsDeleted = true;
+            billSeries.DeletedAt = DateTime.UtcNow;
+            billSeries.LastModifiedBy = GetAuditUser();
 
             await _unitOfWork.SaveChangesAsync();
         }
@@ -152,12 +182,14 @@ namespace Finexa.Application.Modules.Bills.Services
 
             var bills = await _unitOfWork.Repository<BillSeries, Guid>()
                 .Query()
-                .Where(b => b.AppUserId == userId)
-                .Include(b => b.Category)
+                .Where(b =>
+                    b.AppUserId == userId &&
+                    !b.IsDeleted).Include(b => b.Category)
                 .Include(b => b.Occurrences)
                 .OrderByDescending(b => b.IsActive)
                 .ThenBy(b => b.Name)
                 .ToListAsync();
+
 
             return bills.Select(MapBillSeriesToDto).ToList();
         }
@@ -170,7 +202,7 @@ namespace Finexa.Application.Modules.Bills.Services
 
             var bill = await _unitOfWork.Repository<BillSeries, Guid>()
                 .Query()
-                .Where(b => b.Id == billSeriesId && b.AppUserId == userId)
+                .Where(b =>b.Id == billSeriesId &&b.AppUserId == userId &&!b.IsDeleted)
                 .Include(b => b.Category)
                 .Include(b => b.Occurrences)
                 .FirstOrDefaultAsync();
@@ -251,13 +283,17 @@ namespace Finexa.Application.Modules.Bills.Services
             var nextMonthStartUtc = DateTimeHelper.ConvertClientLocalToUtc(nextMonthStartLocal);
 
             var occurrences = await _unitOfWork.Repository<BillOccurrence, Guid>()
-                .Query()
-                .Where(o =>
-                    o.AppUserId == userId &&
-                    o.Status != BillOccurrenceStatus.Cancelled &&
-                    o.Status != BillOccurrenceStatus.Skipped)
-                    .Include(o => o.BillSeries)
-                     .ThenInclude(b => b.Category).ToListAsync();
+            .Query()
+            .Where(o =>
+                o.AppUserId == userId &&
+                o.BillSeries.IsActive &&
+                !o.BillSeries.IsDeleted &&
+                o.Status != BillOccurrenceStatus.Cancelled &&
+                o.Status != BillOccurrenceStatus.Skipped)
+            .Include(o => o.BillSeries)
+                .ThenInclude(b => b.Category)
+            .ToListAsync();
+
 
             var currentMonthOccurrences = occurrences
                 .Where(o => o.DueDate >= monthStartUtc && o.DueDate < nextMonthStartUtc)
@@ -364,10 +400,12 @@ namespace Finexa.Application.Modules.Bills.Services
                     o.AppUserId == userId &&
                     o.DueDate >= monthStartUtc &&
                     o.DueDate < nextMonthStartUtc &&
+                    o.BillSeries.IsActive &&
+                    !o.BillSeries.IsDeleted &&
                     o.Status != BillOccurrenceStatus.Cancelled &&
                     o.Status != BillOccurrenceStatus.Skipped)
                 .Include(o => o.BillSeries)
-                .ThenInclude(b => b.Category).OrderBy(o => o.DueDate)
+                    .ThenInclude(b => b.Category)
                 .ToListAsync();
 
             return new BillCalendarDto
@@ -404,11 +442,16 @@ namespace Finexa.Application.Modules.Bills.Services
                 filter.PageSize = 100;
 
             var query = _unitOfWork.Repository<BillOccurrence, Guid>()
-                .Query()
-                .Where(o => o.AppUserId == userId)
-                .Include(o => o.BillSeries)
+            .Query()
+            .Where(o =>
+                o.AppUserId == userId &&
+                o.Status != BillOccurrenceStatus.Cancelled &&
+                o.Status != BillOccurrenceStatus.Skipped &&
+                (!o.BillSeries.IsDeleted || o.Status == BillOccurrenceStatus.Paid) &&
+                (o.BillSeries.IsActive || o.Status == BillOccurrenceStatus.Paid))
+            .Include(o => o.BillSeries)
                 .ThenInclude(b => b.Category)
-                .AsQueryable();
+            .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filter.Search))
             {
@@ -440,6 +483,28 @@ namespace Finexa.Application.Modules.Bills.Services
                 query = query.Where(o => o.DueDate < toUtc);
             }
 
+            if (!filter.FromDate.HasValue && !filter.ToDate.HasValue)
+            {
+                var egyptTimeZone = DateTimeHelper.GetEgyptTimeZone();
+
+                var localNow = TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTime.UtcNow,
+                    egyptTimeZone);
+
+                var monthStartLocal = new DateTime(
+                    localNow.Year,
+                    localNow.Month,
+                    1);
+
+                var nextMonthStartLocal = monthStartLocal.AddMonths(1);
+
+                var monthStartUtc = DateTimeHelper.ConvertClientLocalToUtc(monthStartLocal);
+                var nextMonthStartUtc = DateTimeHelper.ConvertClientLocalToUtc(nextMonthStartLocal);
+
+                query = query.Where(o =>
+                    o.DueDate >= monthStartUtc &&
+                    o.DueDate < nextMonthStartUtc);
+            }
             var totalCount = await query.CountAsync();
 
             var isDescending =
@@ -476,8 +541,9 @@ namespace Finexa.Application.Modules.Bills.Services
 
             var bills = await _unitOfWork.Repository<BillSeries, Guid>()
                 .Query(withTracking: true)
-                .Where(b => b.IsActive)
-                .Include(b => b.Occurrences)
+                .Where(b =>
+                    b.IsActive &&
+                    !b.IsDeleted).Include(b => b.Occurrences)
                 .ToListAsync();
 
             var createdCount = 0;
@@ -518,6 +584,12 @@ namespace Finexa.Application.Modules.Bills.Services
                 userId);
 
             await _unitOfWork.SaveChangesAsync();
+
+            await CreateBillPaidNotificationAsync(
+                userId,
+                occurrence,
+                occurrence.BillSeries,
+                result);
 
             return result;
         }
@@ -683,7 +755,8 @@ namespace Finexa.Application.Modules.Bills.Services
                 : DateTime.UtcNow;
 
             var paidAtLocal = GetLocalDate(paidAtUtc);
-
+            await EnsureBaseScheduledBillIsPaidForDateAsync(bill.Id,userId,paidAtLocal,
+            "Early renewal cannot be recorded before paying the base bill for this period.");
             var occurrence = CreateSpecialOccurrence(
                 bill,
                 userId,
@@ -692,6 +765,14 @@ namespace Finexa.Application.Modules.Bills.Services
                 paidAtLocal,
                 dto.Notes);
 
+            var nextScheduledOccurrence = await GetNextUnpaidScheduledOccurrenceAsync(bill.Id,userId,paidAtLocal);
+
+            if (nextScheduledOccurrence != null)
+            {
+                nextScheduledOccurrence.Status = BillOccurrenceStatus.Cancelled;
+                nextScheduledOccurrence.Notes = "Covered by early renewal";
+                nextScheduledOccurrence.LastModifiedBy = GetAuditUser();
+            }
             await _unitOfWork.Repository<BillOccurrence, Guid>().AddAsync(occurrence);
 
             var result = await RecordPaymentInternalAsync(
@@ -706,6 +787,12 @@ namespace Finexa.Application.Modules.Bills.Services
                 userId);
 
             await _unitOfWork.SaveChangesAsync();
+
+            await CreateEarlyRenewalNotificationAsync(
+                userId,
+                occurrence,
+                bill,
+                result);
 
             return result;
         }
@@ -737,7 +824,8 @@ namespace Finexa.Application.Modules.Bills.Services
                 : DateTime.UtcNow;
 
             var paidAtLocal = GetLocalDate(paidAtUtc);
-
+            await EnsureBaseScheduledBillIsPaidForDateAsync(bill.Id,userId,paidAtLocal,
+                "Top-up cannot be recorded before paying the base bill for this period.");
             var occurrence = CreateSpecialOccurrence(
                 bill,
                 userId,
@@ -761,6 +849,12 @@ namespace Finexa.Application.Modules.Bills.Services
 
             await _unitOfWork.SaveChangesAsync();
 
+            await CreateTopUpNotificationAsync(
+                userId,
+                occurrence,
+                bill,
+                result);
+
             return result;
         }
 
@@ -781,6 +875,8 @@ namespace Finexa.Application.Modules.Bills.Services
 
             if (occurrence.Status == BillOccurrenceStatus.Cancelled)
                 throw new InvalidOperationException("Cancelled bill occurrence cannot be paid");
+
+            ValidateScheduledOccurrenceCanBePaidNow(occurrence, bill);
 
             var alreadyPaid = await _unitOfWork.Repository<BillPayment, Guid>()
                 .ExistsAsync(p =>
@@ -1347,12 +1443,14 @@ namespace Finexa.Application.Modules.Bills.Services
                 OccurrenceType = occurrence.OccurrenceType,
                 PaidAt = DateTimeHelper.EnsureUtcKind(occurrence.PaidAt),
                 Notes = occurrence.Notes,
-                CanRecordPayment = occurrence.Status == BillOccurrenceStatus.Scheduled,
                 CanSkip = occurrence.Status == BillOccurrenceStatus.Scheduled,
                 CanCancel = occurrence.Status == BillOccurrenceStatus.Scheduled,
-                CanRenewEarly = bill.IsActive && bill.AllowsEarlyRenewal,
-                CanTopUp = bill.IsActive && bill.AllowsTopUp
-            };
+                CanRecordPayment = CanRecordPaymentNow(occurrence, bill),
+
+                CanRenewEarly =bill.IsActive &&bill.AllowsEarlyRenewal &&occurrence.OccurrenceType == BillOccurrenceType.Scheduled &&occurrence.Status == BillOccurrenceStatus.Paid,
+
+                CanTopUp =bill.IsActive &&bill.AllowsTopUp &&occurrence.OccurrenceType == BillOccurrenceType.Scheduled &&occurrence.Status == BillOccurrenceStatus.Paid
+                        };
         }
 
         private static BillPaymentDto MapPaymentToDto(BillPayment payment)
@@ -1502,8 +1600,10 @@ namespace Finexa.Application.Modules.Bills.Services
         {
             var bills = await _unitOfWork.Repository<BillSeries, Guid>()
                 .Query(withTracking: true)
-                .Where(b => b.AppUserId == userId && b.IsActive)
-                .Include(b => b.Occurrences)
+                .Where(b =>
+                    b.AppUserId == userId &&
+                    b.IsActive &&
+                    !b.IsDeleted).Include(b => b.Occurrences)
                 .ToListAsync();
 
             var createdCount = 0;
@@ -1597,7 +1697,71 @@ namespace Finexa.Application.Modules.Bills.Services
         {
             return !bill.EndDate.HasValue || dueDateUtc <= bill.EndDate.Value;
         }
+        private async Task CreateBillPaidNotificationAsync(
+        Guid userId,
+        BillOccurrence occurrence,
+        BillSeries bill,
+        BillPaymentResultDto result)
+        {
+            await _notificationService.CreateForUserAsync(
+                userId,
+                new CreateNotificationDto
+                {
+                    Title = "Bill paid successfully",
+                    Message = $"{bill.Name} has been paid successfully.",
+                    Type = NotificationType.Bill,
+                    Severity = NotificationSeverity.Success,
+                    ShouldToast = false,
+                    RelatedEntityType = nameof(BillOccurrence),
+                    RelatedEntityId = occurrence.Id,
+                    ActionUrl = "/bills",
+                    DeduplicationKey = $"bill-paid-{result.PaymentId}"
+                });
+        }
 
+        private async Task CreateEarlyRenewalNotificationAsync(
+            Guid userId,
+            BillOccurrence occurrence,
+            BillSeries bill,
+            BillPaymentResultDto result)
+        {
+            await _notificationService.CreateForUserAsync(
+                userId,
+                new CreateNotificationDto
+                {
+                    Title = "Early renewal completed",
+                    Message = $"{bill.Name} was renewed early successfully.",
+                    Type = NotificationType.Bill,
+                    Severity = NotificationSeverity.Info,
+                    ShouldToast = false,
+                    RelatedEntityType = nameof(BillOccurrence),
+                    RelatedEntityId = occurrence.Id,
+                    ActionUrl = "/bills",
+                    DeduplicationKey = $"bill-early-renewal-{result.PaymentId}"
+                });
+        }
+
+        private async Task CreateTopUpNotificationAsync(
+            Guid userId,
+            BillOccurrence occurrence,
+            BillSeries bill,
+            BillPaymentResultDto result)
+        {
+            await _notificationService.CreateForUserAsync(
+                userId,
+                new CreateNotificationDto
+                {
+                    Title = "Top-up completed",
+                    Message = $"{bill.Name} top-up has been recorded successfully.",
+                    Type = NotificationType.Bill,
+                    Severity = NotificationSeverity.Info,
+                    ShouldToast = false,
+                    RelatedEntityType = nameof(BillOccurrence),
+                    RelatedEntityId = occurrence.Id,
+                    ActionUrl = "/bills",
+                    DeduplicationKey = $"bill-top-up-{result.PaymentId}"
+                });
+        }
         private Guid GetCurrentUserId()
         {
             var userId = _currentUserService.UserId;
@@ -1607,7 +1771,87 @@ namespace Finexa.Application.Modules.Bills.Services
 
             return userId;
         }
+        private static bool CanRecordPaymentNow(BillOccurrence occurrence,  BillSeries bill)
+        {
+            if (occurrence.Status != BillOccurrenceStatus.Scheduled)
+                return false;
 
+            if (occurrence.OccurrenceType != BillOccurrenceType.Scheduled)
+                return false;
+
+            if (bill.Frequency == BillFrequency.OneTime)
+                return true;
+
+            var today = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.UtcNow,
+                DateTimeHelper.GetEgyptTimeZone()).Date;
+
+            var periodStart = GetLocalDate(occurrence.PeriodStart);
+
+            return periodStart <= today;
+        }
+        private async Task<BillOccurrence?> GetNextUnpaidScheduledOccurrenceAsync(Guid billSeriesId,Guid userId,DateTime localDate)
+        {
+            var localTomorrow = localDate.Date.AddDays(1);
+            var fromUtc = DateTimeHelper.ConvertClientLocalToUtc(localTomorrow);
+
+            return await _unitOfWork.Repository<BillOccurrence, Guid>()
+                .Query(withTracking: true)
+                .Where(o =>
+                    o.BillSeriesId == billSeriesId &&
+                    o.AppUserId == userId &&
+                    o.OccurrenceType == BillOccurrenceType.Scheduled &&
+                    o.Status == BillOccurrenceStatus.Scheduled &&
+                    o.DueDate >= fromUtc)
+                .OrderBy(o => o.DueDate)
+                .FirstOrDefaultAsync();
+        }
+        private async Task EnsureBaseScheduledBillIsPaidForDateAsync(Guid billSeriesId,Guid userId,DateTime localDate,string errorMessage)
+        {
+            var scheduledOccurrences = await _unitOfWork.Repository<BillOccurrence, Guid>()
+                .Query()
+                .Where(o =>
+                    o.BillSeriesId == billSeriesId &&
+                    o.AppUserId == userId &&
+                    o.OccurrenceType == BillOccurrenceType.Scheduled &&
+                    o.Status == BillOccurrenceStatus.Paid)
+                .ToListAsync();
+
+            var hasPaidBaseBill = scheduledOccurrences.Any(o =>
+            {
+                var periodStart = GetLocalDate(o.PeriodStart);
+                var periodEnd = GetLocalDate(o.PeriodEnd);
+
+                return localDate >= periodStart && localDate <= periodEnd;
+            });
+
+            if (!hasPaidBaseBill)
+                throw new InvalidOperationException(errorMessage);
+        }
+        private static void ValidateScheduledOccurrenceCanBePaidNow(BillOccurrence occurrence,BillSeries bill)
+        {
+            if (occurrence.OccurrenceType != BillOccurrenceType.Scheduled)
+                return;
+
+            if (bill.Frequency == BillFrequency.OneTime)
+                return;
+
+            var today = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.UtcNow,
+                DateTimeHelper.GetEgyptTimeZone()).Date;
+
+            var periodStart = GetLocalDate(occurrence.PeriodStart);
+
+            if (periodStart <= today)
+                return;
+
+            if (bill.AllowsEarlyRenewal)
+                throw new InvalidOperationException(
+                    "This bill occurrence belongs to a future billing period. Use early renewal instead.");
+
+            throw new InvalidOperationException(
+                "This bill occurrence belongs to a future billing period and early renewal is not allowed.");
+        }
         private string GetAuditUser()
         {
             return string.IsNullOrWhiteSpace(_currentUserService.Email)

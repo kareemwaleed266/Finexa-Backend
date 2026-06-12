@@ -32,6 +32,8 @@
         public bool AllowsEarlyRenewal { get; set; }
 
         public bool AllowsTopUp { get; set; }
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
 
         //public bool AllowsExtraPayment { get; set; }
 

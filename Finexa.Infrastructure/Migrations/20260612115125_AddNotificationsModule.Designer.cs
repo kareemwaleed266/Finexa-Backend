@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Finexa.Infrastructure.Migrations
 {
     [DbContext(typeof(FinexaDbContext))]
-    partial class FinexaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260612115125_AddNotificationsModule")]
+    partial class AddNotificationsModule
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -468,9 +471,6 @@ namespace Finexa.Infrastructure.Migrations
                     b.Property<decimal?>("DefaultAmount")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -491,11 +491,6 @@ namespace Finexa.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("LastModifiedAt")
                         .HasColumnType("datetime2");
@@ -523,8 +518,6 @@ namespace Finexa.Infrastructure.Migrations
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("IsActive");
-
-                    b.HasIndex("AppUserId", "IsDeleted");
 
                     b.ToTable("BillSeries");
                 });
